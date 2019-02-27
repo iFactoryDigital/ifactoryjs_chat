@@ -1,0 +1,138 @@
+
+$chat-panes       : 10;
+$chat-pane-width  : ($spacer * 20);
+$chat-pane-spacer : ($spacer / 2);
+
+$chat-pane-height : $chat-pane-width * 1.5;
+
+.chat {
+  right    : 0;
+  bottom   : 0;
+  padding  : $chat-pane-spacer;
+  position : absolute;
+
+  .chat-chats {
+
+    .btn-chat {
+      width        : $chat-pane-width;
+      margin-right : $chat-pane-spacer;
+    }
+  }
+
+  .btn-open {
+    right       : $chat-pane-spacer;
+    width       : ($line-height-base * $font-size-base) + ($input-btn-padding-y * 2);
+    height      : ($line-height-base * $font-size-base) + ($input-btn-padding-y * 2);
+    bottom      : $chat-pane-spacer;
+    padding     : 0;
+    position    : absolute;
+    text-align  : center;
+    line-height : ($line-height-base * $font-size-base) + ($input-btn-padding-y * 2);
+  }
+
+  .card.card-chats {
+    right    : $chat-pane-spacer;
+    width    : $chat-pane-width;
+    height   : $chat-pane-height;
+    bottom   : ($input-btn-padding-y * 2) + ($line-height-base * $font-size-base) + ($chat-pane-spacer * 2);
+    position : absolute;
+  }
+}
+
+.eden-admin {
+
+  .chat {
+    left : $eden-admin-navbar-height;
+  }
+}
+
+.chat-pane.gu-mirror {
+  width   : auto;
+  height  : auto;
+  opacity : 1!important;
+}
+
+.chat-pane {
+  width    : $chat-pane-width;
+  position : absolute;
+
+  &.chat-free {
+    position : fixed;
+  }
+
+  .card {
+    &.chat-open {
+      height : $chat-pane-height;
+    }
+  }
+
+  // history
+  .card-body {
+    padding    : $spacer;
+    overflow-y : scroll;
+
+    > ul {
+      padding    : 0;
+      list-style : none;
+    }
+
+    .message-data {
+      margin-bottom : $chat-pane-spacer;
+    }
+
+    .message-data-name {
+      font-size    : $font-size-sm;
+      margin-right : $chat-pane-spacer;
+    }
+    .message-data-time {
+      color     : $text-muted;
+      font-size : $font-size-sm;
+    }
+
+    .message {
+      width         : 90%;
+      color         : $white;
+      padding       : $chat-pane-spacer;
+      position      : relative;
+      margin-bottom : ($chat-pane-spacer * 2);
+      border-radius : $border-radius;
+
+      &:after {
+        left     : 7%;
+        width    : 0;
+        height   : 0;
+        bottom   : 100%;
+        border   : solid transparent;
+        content  : " ";
+        position : absolute;
+
+        // theme color border
+        margin-left         : -$chat-pane-spacer;
+        border-width        : $chat-pane-spacer;
+        border-bottom-color : theme-color(success);
+      }
+    }
+
+    // message my
+    .my-message {
+      background : theme-color(success);
+    }
+
+    // other message
+    .other-message {
+      background : theme-color(primary);
+
+      &:after {
+        left                : 93%;
+        border-bottom-color : theme-color(primary);
+      }
+    }
+  }
+}
+
+@for $i from 0 through $chat-panes {
+  .chat-pane-#{$i} {
+    right  : ($i * $chat-pane-spacer) + ($chat-pane-width * $i) + ($chat-pane-spacer * 2) + ($line-height-base * $font-size-base) + ($input-btn-padding-y * 2);
+    bottom : $chat-pane-spacer;
+  }
+}
