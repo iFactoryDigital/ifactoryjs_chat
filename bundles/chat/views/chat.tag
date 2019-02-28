@@ -89,6 +89,8 @@
       
       // set opened
       await socket.call('chat.user.set', chat.get('id'), 'opened', false);
+      await socket.call('chat.user.set', chat.get('id'), 'style', null);
+      await socket.call('chat.user.set', chat.get('id'), 'closed', false);
     }
     
     /**

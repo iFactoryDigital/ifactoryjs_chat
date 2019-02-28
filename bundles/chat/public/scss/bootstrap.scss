@@ -1,21 +1,31 @@
 
-$chat-panes       : 10;
-$chat-pane-width  : ($spacer * 20);
-$chat-pane-spacer : ($spacer / 2);
+$chat-panes       : 10!default;
+$chat-pane-width  : ($spacer * 20)!default;
+$chat-pane-spacer : ($spacer / 2)!default;
 
-$chat-pane-height : $chat-pane-width * 1.5;
+$chat-pane-height : $chat-pane-width * 1.5!default;
 
 .chat {
   right    : 0;
   bottom   : 0;
   padding  : $chat-pane-spacer;
-  position : absolute;
+  z-index  : 201;
+  position : fixed;
 
   .chat-chats {
 
     .btn-chat {
       width        : $chat-pane-width;
       margin-right : $chat-pane-spacer;
+    }
+
+    .chat-user {
+      padding : $chat-pane-spacer;
+
+      &:hover {
+        cursor     : pointer;
+        background : $card-cap-bg;
+      }
     }
   }
 
@@ -54,6 +64,7 @@ $chat-pane-height : $chat-pane-width * 1.5;
 
 .chat-pane {
   width    : $chat-pane-width;
+  z-index  : 200;
   position : absolute;
 
   &.chat-free {

@@ -72,8 +72,15 @@ class ChatController extends Controller {
    * @return {Async}
    */
   async usersAction(search, opts) {
-    // search users
-    const users = await User.match('username', new RegExp(escapeRegex(search.toString().toLowerCase()), 'i')).sort('active', -1).limit(20).find();
+    // set query
+    let users = [];
+    const query = User;
+
+    // hook
+    await this.eden.hook('chat.users', { search, query, opts }, async () => {
+      // find users
+      users = await query.match('username', new RegExp(escapeRegex(search.toString().toLowerCase()), 'i')).sort('active', -1).limit(20).find();
+    });
 
     // sanitise users
     return await Promise.all(users.map(user => user.sanitise()));
@@ -122,14 +129,28 @@ class ChatController extends Controller {
       creator : opts.user,
     });
 
-    // save chat
-    await chat.save();
+    // set data
+    const data = {};
+
+    // await hook
+    await this.eden.hook('eden.chat.create', {
+      ids, chat, data, opts,
+    }, async () => {
+      // save message
+      if (!data.prevent) await chat.save();
+    });
+
+    // hooks
+    if (!chat.get('_id')) return null;
 
     // emit created
     users.forEach(async (user) => {
       // emit
       socket.user(user, 'chat.create', await chat.sanitise(user));
     });
+
+    // emit
+    this.eden.emit('eden.chat.create', await chat.sanitise(), true);
 
     // return chat
     return await chat.sanitise(opts.user);
@@ -153,8 +174,19 @@ class ChatController extends Controller {
     // set style
     chat.set(`${opts.user.get('_id').toString()}.${key}`, value);
 
-    // save chat
-    await chat.save();
+    // set data
+    const data = {};
+
+    // await hook
+    await this.eden.hook('eden.chat.set', {
+      chat, data, key, value, opts,
+    }, async () => {
+      // save message
+      if (!data.prevent) await chat.save();
+    });
+
+    // hooks
+    if (!chat.get('_id')) return null;
 
     // emit to socket
     socket.user(opts.user, `model.update.chat.${chat.get('_id').toString()}`, {
@@ -206,11 +238,25 @@ class ChatController extends Controller {
       message.set('embeds', embeds);
     }
 
-    // save message
-    await message.save();
+    // await hook
+    await this.eden.hook('eden.chat.message', {
+      data, message, id, opts,
+    }, async () => {
+      // save message
+      if (!data.prevent) await message.save();
+    });
+
+    // check id
+    if (!message.get('_id')) return null;
+
+    // sanitise message
+    const sanitised = await message.sanitise();
+
+    // emit
+    this.eden.emit('eden.chat.message', sanitised, true);
 
     // emit to socket
-    socket.room(`chat.${chat.get('_id').toString()}`, `chat.${chat.get('_id').toString()}.message`, await message.sanitise());
+    socket.room(`chat.${chat.get('_id').toString()}`, `chat.${chat.get('_id').toString()}.message`, sanitised);
 
     // return chat
     return await message.sanitise();

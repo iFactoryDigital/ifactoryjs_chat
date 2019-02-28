@@ -123,6 +123,11 @@
       // prevent default
       e.preventDefault();
       e.stopPropagation();
+      
+      // return no message
+      if ((!this.refs.message.value || '').trim().length) {
+        return;
+      }
 
       // create message
       const message = {
