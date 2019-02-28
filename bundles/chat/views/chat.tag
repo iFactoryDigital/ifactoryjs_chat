@@ -31,7 +31,7 @@
       
       <div ref="container">
         <chat-pane each={ chat, i in getChats() } if={ !chat.get('style') } on-close={ onCloseChat } chat={ chat } i={ i } class="chat-pane chat-pane-{ i }" data-chat={ chat.get('uuid') } />
-        <chat-pane each={ chat, i in getChats(true) } if={ chat.get('style') } on-close={ onCloseChat } chat={ chat } i={ i } class="chat-pane chat-free" data-chat={ chat.get('uuid') } style="top: { chat.get('style.top') }; left: { chat.get('style.left') };" />
+        <chat-pane each={ chat, i in getChats(true) } if={ chat.get('style') } on-close={ onCloseChat } chat={ chat } i={ i } class="chat-pane chat-free" data-chat={ chat.get('uuid') } style="top: { chat.get('style.top') }; left: { chat.get('style.left') };{ chat.get('style.z-index') ? 'z-index: ' + chat.get('style.z-index') + ';' : '' }" onclick={ onActivate }  />
       </div>
     </div>
   </div>
@@ -120,6 +120,34 @@
         // send message
         this.onSearch(e);
       }
+    }
+    
+    /**
+     * on activate
+     *
+     * @param  {Event} e
+     */
+    onActivate(e) {
+      // get chat
+      const chat = (e.item || {}).chat || e;
+        
+      // get chats
+      chat.set('style.z-index', 100 + this.getChats(true).length);
+      
+      // move down next top chat
+      this.getChats(true).filter((c) => c.get('id') !== chat.get('id')).forEach((c) => {
+        // set z-index
+        if (c.get('style.z-index')) c.set('style.z-index', c.get('style.z-index') === 100 ? 100 : c.get('style.z-index') - 1);
+        
+        // set chat style
+        socket.call('chat.user.set', c.get('id'), 'style', c.get('style'));
+      });
+      
+      // set chat style
+      socket.call('chat.user.set', chat.get('id'), 'style', chat.get('style'));
+      
+      // update view
+      this.update();
     }
     
     /**
@@ -226,6 +254,27 @@
       // require dragula
       const dragula = require('dragula');
       
+      // drop function
+      const drop = (el, target, source, sibling) => {
+        // get style element
+        const clone = document.querySelector('.gu-mirror[data-chat="' + el.getAttribute('data-chat') + '"]');
+        
+        // get styleW
+        const chat = this.chats.find((chat) => chat.get('uuid') === el.getAttribute('data-chat'));
+        
+        // set style
+        chat.set('style', {
+          top  : clone.style.top,
+          left : clone.style.left,
+        });
+        
+        // activate chat
+        this.onActivate(chat);
+        
+        // update view
+        this.update();
+      };
+      
       // get elements
       this.drake =  dragula([this.refs.container], {
         moves : function (el, source, handle, sibling) {
@@ -242,28 +291,16 @@
             parent = parent.parentNode;
           }
         },
+      }).on('cloned', (clone, original, type) => {
+        // set scroll height
+        const scroll = clone.querySelector('[ref="messages"]');
+        
+        // fix scroll top
+        if (scroll) scroll.scrollTop = scroll.scrollHeight;
       }).on('drag', (el, source) => {
         // set opacity
         el.style.opacity = 0;
-      }).on('cancel', (el, target, source, sibling) => {
-        // get style element
-        const clone = document.querySelector('.gu-mirror[data-chat="' + el.getAttribute('data-chat') + '"]');
-        
-        // get styleW
-        const chat = this.chats.find((chat) => chat.get('uuid') === el.getAttribute('data-chat'));
-        
-        // set style
-        chat.set('style', {
-          top  : clone.style.top,
-          left : clone.style.left,
-        });
-        
-        // set chat style
-        socket.call('chat.user.set', chat.get('id'), 'style', chat.get('style'));
-        
-        // update view
-        this.update();
-      });
+      }).on('cancel', drop).on('drop', drop);
     }
     
     /**

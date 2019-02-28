@@ -1,4 +1,8 @@
 
+// import
+@import "~perfect-scrollbar/css/perfect-scrollbar";
+
+// variables
 $chat-panes       : 10!default;
 $chat-pane-width  : ($spacer * 20)!default;
 $chat-pane-spacer : ($spacer / 2)!default;
@@ -63,9 +67,10 @@ $chat-pane-height : $chat-pane-width * 1.5!default;
 }
 
 .chat-pane {
-  width    : $chat-pane-width;
-  z-index  : 200;
-  position : absolute;
+  width      : $chat-pane-width;
+  z-index    : 100;
+  position   : absolute;
+  box-shadow : $box-shadow-lg;
 
   &.chat-free {
     position : fixed;
@@ -95,6 +100,7 @@ $chat-pane-height : $chat-pane-width * 1.5!default;
 
   .chat-embeds {
     width       : 100%;
+    position    : relative;
     overflow-x  : auto;
     white-space : nowrap;
 
@@ -162,6 +168,7 @@ $chat-pane-height : $chat-pane-width * 1.5!default;
   // history
   .card-body {
     padding        : $spacer;
+    position       : relative;
     overflow-y     : scroll;
     padding-bottom : 0;
 

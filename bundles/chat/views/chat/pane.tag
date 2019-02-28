@@ -24,33 +24,13 @@
     </div>
     <div class="card-body" show={ !this.chat.get('closed') } ref="messages">
       <ul>
-      
-        <li each={ message, i in this.messages } class="clearfix">          
-          <div class="message-data { message.from === this.user.get('id') ? 'text-left' : 'text-right' }">
-            { getFrom(message).username }, <small class="text-muted">{ getDate(message) }</small>
-          </div>
-          
-          <div class="message { message.from === this.user.get('id') ? 'my-message' : 'other-message float-right text-right' }">
-            <raw data={ { 'html' : message.message } } />
-          </div>
-          
-          <div if={ (message.embeds || []).length } class="mb-2 chat-embeds { message.from !== this.user.get('id') ? 'text-right' : '' }">
-            <a each={ embed, i in message.embeds } class="embed text-body" style="{ embed.type === 'image' ? 'background-image:url(' + (embed.id ? this.media.url(embed, '2x') : embed.thumb) + ');' : '' }" title={ embed.name } target={ embed.id ? '_blank' : null } href={ embed.id ? this.media.url(embed) : '#' }>
-              <i class="fa { embed.icon }" />
-              <span class="embed-name">
-                { embed.name }
-              </span>
-              <div class="progress" if={ !embed.id }>
-                <div class="progress-bar" role="progressbar" aria-valuenow={ embed.progress } aria-valuemin="0" aria-valuemax="100" style="width: { embed.progress }%;"></div>
-              </div>
-            </a>
-          </div>
-        </li>
+        
+        <li each={ message, i in this.messages } data-is="chat-message" class="clearfix" chat={ chat } message={ message } />
         
       </ul>
     </div>
     <div class="card-footer p-2" show={ !this.chat.get('closed') }>
-      <div if={ this.embeds.length } class="mb-2 chat-embeds">
+      <div ref="embeds" if={ this.embeds.length } class="mb-2 chat-embeds">
         <div each={ embed, i in this.embeds } class="embed" style="{ embed.type === 'image' ? 'background-image:url(' + embed.thumb + ');' : '' }" title={ embed.name }>
           <i class="fa { embed.icon }" />
           <span class="embed-name">
@@ -92,9 +72,10 @@
     this.messages = this.chat.get('messages') || [];
     
     // require dependencies
-    const uuid   = require('uuid');
-    const icons  = require('font-awesome-filetypes');
-    const moment = require('moment');
+    const uuid      = require('uuid');
+    const icons     = require('font-awesome-filetypes');
+    const moment    = require('moment');
+    const Scrollbar = require('perfect-scrollbar');
     
     /**
      * on close
@@ -336,30 +317,6 @@
       // return usernames
       return this.chat.get('users').filter((user) => user.id !== this.user.get('id')).map((user) => user.username).join(', ');
     }
-    
-    /**
-     * gets from
-     *
-     * @param  {Object} message
-     *
-     * @return {Object}
-     */
-    getFrom(message) {
-      // return usernames
-      return this.chat.get('users').find((user) => user.id === message.from);
-    }
-    
-    /**
-     * get date
-     *
-     * @param  {Object} message
-     *
-     * @return {String}
-     */
-    getDate(message) {
-      // from now
-      return moment(message.created_at).fromNow();
-    }
 
     /**
      * remove value from upload
@@ -474,13 +431,56 @@
       return rtn;
     }
     
-    // on mount
-    this.on('update', () => {
-      // check frontend
-      if (!this.eden.frontend) return;
+    /**
+     * do scroll
+     *
+     * @return {*}
+     */
+    doScroll() {
+      // set up scrollbar
+      if (!this.scrollbar) {
+        // do scrollbar
+        this.scrollbar = new Scrollbar(this.refs.messages);
+      }
+      
+      // set scroll height
+      this.refs.messages.scrollTop = this.refs.messages.scrollHeight;
       
       // scroll to bottom
-      this.refs.messages.scrollTop = this.refs.messages.scrollHeight;
+      setTimeout(() => {
+        // set scroll height
+        this.refs.messages.scrollTop = this.refs.messages.scrollHeight;
+      }, 100);
+      
+      // check embeds
+      if (this.refs.embeds && !this.embedScroll) {
+        // set embed scrollbar
+        this.embedScroll = new Scrollbar(this.refs.embeds);
+      } else if (!this.refs.embeds) {
+        // reset
+        this.embedScroll = null;
+      }
+    }
+    
+    // on mount
+    this.on('mount', () => {
+      // check frontend
+      if (!this.eden.frontend || !this.user.exists()) return;
+      
+      // on created
+      socket.on(`chat.${this.chat.get('id')}.message`, this.onMessage);
+      
+      // scroll to bottom
+      this.doScroll();
+    });
+    
+    // on mount
+    this.on('mounted', () => {
+      // check frontend
+      if (!this.eden.frontend || !this.user.exists()) return;
+      
+      // scroll to bottom
+      this.doScroll();
     });
     
     // on mount
@@ -493,30 +493,21 @@
     });
     
     // on mount
-    this.on('mount', () => {
+    this.on('update', () => {
       // check frontend
-      if (!this.eden.frontend || !this.user.exists()) return;
-      
-      // on created
-      socket.on(`chat.${this.chat.get('id')}.message`, this.onMessage);
-
-      // set scroll height
-      this.refs.messages.scrollTop = this.refs.messages.scrollHeight;
+      if (!this.eden.frontend) return;
       
       // scroll to bottom
-      setTimeout(() => {
-        // set scroll height
-        this.refs.messages.scrollTop = this.refs.messages.scrollHeight;
-      }, 1000);
+      this.doScroll();
     });
     
     // on mount
-    this.on('mounted', () => {
+    this.on('updated', () => {
       // check frontend
       if (!this.eden.frontend || !this.user.exists()) return;
       
       // scroll to bottom
-      this.refs.messages.scrollTop = this.refs.messages.scrollHeight;
+      this.doScroll();
     });
   </script>
 </chat-pane>
