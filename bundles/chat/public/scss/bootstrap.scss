@@ -66,18 +66,102 @@ $chat-pane-height : $chat-pane-width * 1.5;
     }
   }
 
+  .btn-file {
+    position : relative;
+    overflow : hidden;
+
+    input {
+      top      : 0;
+      left     : 0;
+      right    : 0;
+      width    : 100%;
+      height   : 100%;
+      bottom   : 0;
+      opacity  : 0;
+      position : absolute;
+    }
+  }
+
+  .chat-embeds {
+    width       : 100%;
+    overflow-x  : auto;
+    white-space : nowrap;
+
+    &.text-right {
+      .embed {
+        margin-left  : $chat-pane-spacer;
+        margin-right : 0;
+      }
+    }
+
+    .embed {
+      width           : ($chat-pane-width / 3);
+      height          : ($chat-pane-width / 4);
+      border          : $card-border-width solid $card-border-color;
+      display         : inline-block;
+      overflow        : hidden;
+      position        : relative;
+      background      : $white;
+      text-align      : center;
+      box-shadow      : $box-shadow-sm;
+      margin-right    : $chat-pane-spacer;
+      border-radius   : $border-radius;
+      background-size : cover;
+
+      > i {
+        clear         : both;
+        display       : block;
+        font-size     : $font-size-lg;
+        text-align    : center;
+        margin-top    : ($chat-pane-spacer * 2);
+        margin-bottom : $chat-pane-spacer;
+      }
+
+      .embed-name {
+        width         : calc(100% - #{($chat-pane-spacer * 2)});
+        display       : block;
+        overflow      : hidden;
+        font-size     : $font-size-sm;
+        white-space   : nowrap;
+        margin-left   : $chat-pane-spacer;
+        margin-right  : $chat-pane-spacer;
+        text-overflow : ellipsis;
+      }
+
+      .btn-danger {
+        top         : ($chat-pane-spacer / 2);
+        right       : ($chat-pane-spacer / 2);
+        padding     : ($chat-pane-spacer / 2);
+        position    : absolute;
+        font-size   : $font-size-sm;
+        line-height : 1;
+      }
+
+      .progress {
+        top      : auto;
+        left     : ($chat-pane-spacer / 2);
+        right    : ($chat-pane-spacer / 2);
+        bottom   : ($chat-pane-spacer / 2);
+        height   : $chat-pane-spacer;
+        position : absolute;
+      }
+    }
+  }
+
   // history
   .card-body {
-    padding    : $spacer;
-    overflow-y : scroll;
+    padding        : $spacer;
+    overflow-y     : scroll;
+    padding-bottom : 0;
 
     > ul {
+      margin     : 0;
       padding    : 0;
       list-style : none;
     }
 
     .message-data {
-      margin-bottom : $chat-pane-spacer;
+      margin-bottom : ($chat-pane-spacer / 2);
     }
 
     .message-data-name {
@@ -90,15 +174,22 @@ $chat-pane-height : $chat-pane-width * 1.5;
     }
 
     .message {
-      width         : 90%;
       color         : $white;
-      padding       : $chat-pane-spacer;
+      display       : inline-block;
+      padding       : ($chat-pane-spacer / 2) $chat-pane-spacer;
       position      : relative;
-      margin-bottom : ($chat-pane-spacer * 2);
+      font-size     : $font-size-sm;
+      max-width     : 90%;
+      margin-bottom : $chat-pane-spacer;
       border-radius : $border-radius;
 
+      a {
+        color           : $white;
+        text-decoration : underline;
+      }
+
       &:after {
-        left     : 7%;
+        left     : $chat-pane-spacer;
         width    : 0;
         height   : 0;
         bottom   : 100%;
@@ -107,8 +198,7 @@ $chat-pane-height : $chat-pane-width * 1.5;
         position : absolute;
 
         // theme color border
-        margin-left         : -$chat-pane-spacer;
-        border-width        : $chat-pane-spacer;
+        border-width        : ($chat-pane-spacer / 2);
         border-bottom-color : theme-color(success);
       }
     }
@@ -123,7 +213,8 @@ $chat-pane-height : $chat-pane-width * 1.5;
       background : theme-color(primary);
 
       &:after {
-        left                : 93%;
+        left                : auto;
+        right               : $chat-pane-spacer;
         border-bottom-color : theme-color(primary);
       }
     }

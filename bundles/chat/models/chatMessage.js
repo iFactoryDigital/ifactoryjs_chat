@@ -1,5 +1,6 @@
 
 // require local dependencies
+const icons = require('font-awesome-filetypes');
 const Model = require('model');
 
 /**
@@ -25,7 +26,21 @@ class ChatMessage extends Model {
   async sanitise() {
     // return object
     const sanitised = {
-      id         : this.get('_id') ? this.get('_id').toString() : null,
+      id     : this.get('_id') ? this.get('_id').toString() : null,
+      from   : this.get('from.id'),
+      uuid   : this.get('uuid'),
+      embeds : await Promise.all((await this.get('embeds') || []).map(async (embed) => {
+        // sanitise embed
+        const s = await embed.sanitise();
+
+        // set type
+        s.type = embed.constructor.name.toLowerCase();
+        s.icon = icons.getClassNameForExtension(s.name.split('.').pop());
+
+        // return sanitised
+        return s;
+      })),
+      message    : this.get('message'),
       created_at : this.get('created_at'),
       updated_at : this.get('updated_at'),
     };
@@ -33,7 +48,8 @@ class ChatMessage extends Model {
     // await hook
     await this.eden.hook('chatmessage.sanitise', {
       sanitised,
-      chat : this,
+
+      message : this,
     });
 
     // return sanitised

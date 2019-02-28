@@ -1,14 +1,14 @@
 <chat>
-  <div class={ 'chat' : true, 'd-none' : !this.eden.frontend } style="right:{ this.offset || 0 }px">
+  <div if={ this.user.exists() } class={ 'chat' : true, 'd-none' : !this.eden.frontend } style="right:{ this.offset || 0 }px">
     <div class="chat-chats { 'is-open' : this.open }">
     
       <div class={ 'card card-chats mb-3' : true, 'd-none' : !this.open }>
         <div class="card-header p-2">
           <div class="form-group m-0">
             <div class="input-group">
-              <input class="form-control" type="search" ref="search" />
+              <input class="form-control" type="search" ref="search" onkeyup={ onKeyUp } />
               <div class="input-group-append">
-                <button class="btn btn-primary">
+                <button class="btn btn-primary" onclick={ onSearch }>
                   <i class="fa fa-search" />
                 </button>
               </div>
@@ -30,8 +30,8 @@
       </button>
       
       <div ref="container">
-        <chat-pane each={ chat, i in getChats() } if={ !chat.get('style') } chat={ chat } i={ i } class="chat-pane chat-pane-{ i }" data-chat={ chat.get('uuid') } />
-        <chat-pane each={ chat, i in getChats(true) } if={ chat.get('style') } chat={ chat } i={ i } class="chat-pane chat-free" data-chat={ chat.get('uuid') } style="top: { chat.get('style.top') }; left: { chat.get('style.left') };" />
+        <chat-pane each={ chat, i in getChats() } if={ !chat.get('style') } on-close={ onCloseChat } chat={ chat } i={ i } class="chat-pane chat-pane-{ i }" data-chat={ chat.get('uuid') } />
+        <chat-pane each={ chat, i in getChats(true) } if={ chat.get('style') } on-close={ onCloseChat } chat={ chat } i={ i } class="chat-pane chat-free" data-chat={ chat.get('uuid') } style="top: { chat.get('style.top') }; left: { chat.get('style.left') };" />
       </div>
     </div>
   </div>
@@ -68,13 +68,56 @@
       this.update();
       
       // create chat
-      await socket.call('chat.create', [this.user.get('id'), user.id]);
+      const chat = await socket.call('chat.create', [this.user.get('id'), user.id]);
+      await socket.call('chat.user.set', chat.id, 'opened', true);
       
       // set loading
       user.loading = false;
       
       // set chat
       this.update();
+    }
+    
+    /**
+     * on close chat
+     *
+     * @param  {Chat} chat
+     */
+    async onCloseChat(chat) {      
+      // filter chats
+      this.chats = this.chats.filter((c) => c.get('id') !== chat.get('id'));
+      
+      // set opened
+      await socket.call('chat.user.set', chat.get('id'), 'opened', false);
+    }
+    
+    /**
+     * on send
+     *
+     * @param  {Event} e
+     *
+     * @return {*}
+     */
+    onSearch(e) {
+      // prevent default
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // load users
+      this.loadUsers();
+    }
+    
+    /**
+     * on keyup
+     *
+     * @param  {Event} e
+     */
+    onKeyUp(e) {
+      // enter pressed
+      if ((e.keyCode ? e.keyCode : e.which) === 13) {
+        // send message
+        this.onSearch(e);
+      }
     }
     
     /**
@@ -91,6 +134,28 @@
       
       // load users
       this.users = await socket.call('chat.users', this.refs.search.value);
+      
+      // set loading
+      this.loading = false;
+      
+      // update view
+      this.update();
+    }
+    
+    /**
+     * load users
+     *
+     * @return {Promise}
+     */
+    async loadChats() {
+      // set loading
+      this.loading = true;
+      
+      // update view
+      this.update();
+      
+      // load users
+      this.chats = (await socket.call('chat.chats') || []).map(chat => this.model('chat', chat));
       
       // set loading
       this.loading = false;
@@ -162,8 +227,18 @@
       // get elements
       this.drake =  dragula([this.refs.container], {
         moves : function (el, source, handle, sibling) {
+          // get parent
+          let parent = handle;
+          
           // check moves
-          return (handle.getAttribute('class') + handle.parentNode.getAttribute('class')).includes('btn-move');
+          while (parent && parent.getAttribute) {
+            // return true if has card header
+            if ((parent.getAttribute('class') || '').includes('card-header')) return true;
+            if ((parent.getAttribute('class') || '').includes('btn')) return false;
+            
+            // set parent
+            parent = parent.parentNode;
+          }
         },
       }).on('drag', (el, source) => {
         // set opacity
@@ -219,7 +294,7 @@
     // on mount
     this.on('mount', () => {
       // check frontend
-      if (!this.eden.frontend) return;
+      if (!this.eden.frontend || !this.user.exists()) return;
       
       // get sidebar width
       this.offset = this.root.parentNode.offsetWidth - this.root.parentNode.clientWidth;
@@ -230,6 +305,7 @@
       
       // load users
       this.loadUsers();
+      this.loadChats();
       
       // on created
       socket.on('chat.create', this.onCreated);

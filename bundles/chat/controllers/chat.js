@@ -2,12 +2,17 @@
 // Require dependencies
 const uuid        = require('uuid');
 const socket      = require('socket');
+const toText      = require('html-to-text');
+const autolinker  = require('autolinker');
 const Controller  = require('controller');
 const escapeRegex = require('escape-string-regexp');
 
 // Require models
-const User = model('user');
-const Chat = model('chat');
+const Chat    = model('chat');
+const File    = model('file');
+const User    = model('user');
+const Image   = model('image');
+const Message = model('chatMessage');
 
 // require helpers
 const chatHelper = helper('chat');
@@ -16,7 +21,7 @@ const modelHelper = helper('model');
 /**
  * Build chat controller
  *
- * @acl   admin
+ * @acl   true
  * @fail  next
  * @mount /chat
  */
@@ -75,6 +80,25 @@ class ChatController extends Controller {
   }
 
   /**
+   * socket listen action
+   *
+   * @param  {String} id
+   * @param  {Object} opts
+   *
+   * @call   chat.chats
+   * @return {Async}
+   */
+  async chatsAction(opts) {
+    // search users
+    const chats = await Chat.where({
+      [`${opts.user.get('_id').toString()}.opened`] : true,
+    }).find();
+
+    // sanitise users
+    return await Promise.all(chats.map(chat => chat.sanitise(opts.user)));
+  }
+
+  /**
    * create action
    *
    * @param  {Array}  ids
@@ -104,11 +128,11 @@ class ChatController extends Controller {
     // emit created
     users.forEach(async (user) => {
       // emit
-      socket.user(user, 'chat.create', await chat.sanitise());
+      socket.user(user, 'chat.create', await chat.sanitise(user));
     });
 
     // return chat
-    return true;
+    return await chat.sanitise(opts.user);
   }
 
   /**
@@ -139,6 +163,57 @@ class ChatController extends Controller {
 
     // return chat
     return await chat.sanitise(opts.user);
+  }
+
+  /**
+   * update chat action
+   *
+   * @param  {String} id
+   * @param  {String} key
+   * @param  {*}      value
+   * @param  {Object} opts
+   *
+   * @call   chat.message
+   * @return {Promise}
+   */
+  async messageAction(id, data, opts) {
+    // load chat
+    const chat = await Chat.findById(id);
+
+    // create message
+    const message = new Message({
+      chat,
+
+      from    : opts.user,
+      uuid    : data.uuid,
+      message : autolinker.link(toText.fromString(data.message)),
+    });
+
+    // check embeds
+    if (data.embeds) {
+      // loop embeds
+      const embeds = (await Promise.all(data.embeds.map(async (embed) => {
+        try {
+          // await
+          return await File.findById(embed) || await Image.findById(embed);
+        } catch (e) {}
+
+        // return null
+        return null;
+      }))).filter(e => e);
+
+      // set embeds
+      message.set('embeds', embeds);
+    }
+
+    // save message
+    await message.save();
+
+    // emit to socket
+    socket.room(`chat.${chat.get('_id').toString()}`, `chat.${chat.get('_id').toString()}.message`, await message.sanitise());
+
+    // return chat
+    return await message.sanitise();
   }
 
 
