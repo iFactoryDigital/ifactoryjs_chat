@@ -361,6 +361,7 @@
       
       // get sidebar width
       this.offset = this.root.parentNode.offsetWidth - this.root.parentNode.clientWidth;
+      if (this.offset > 25) this.offset = 0;
       this.update();
       
       // setup dragula
