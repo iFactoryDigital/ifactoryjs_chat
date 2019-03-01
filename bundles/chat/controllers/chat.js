@@ -104,7 +104,7 @@ class ChatController extends Controller {
       opened : true,
     }, {
       opened : null,
-    }).find()).map(cUser => cUser.get('chat')));
+    }).find()).map(cUser => cUser.get('chat'))).filter(chat => chat);
 
     // sanitise users
     return await Promise.all(chats.map(chat => chat.sanitise(opts.user)));

@@ -53,7 +53,7 @@ class Chat extends Model {
 
       // loop user stuff
       Object.keys(userStuff.get()).filter(key => !['chat', 'user', 'created_at', 'updated_at'].includes(key)).forEach((key) => {
-        sanitised[key] = userStuff[key];
+        sanitised[key] = userStuff.get(key);
       });
     }
 
