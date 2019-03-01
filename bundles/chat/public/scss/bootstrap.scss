@@ -70,8 +70,11 @@ $chat-pane-height : $chat-pane-width * 1.5!default;
   width      : $chat-pane-width;
   z-index    : 100;
   position   : absolute;
-  box-shadow : $box-shadow-lg;
+  box-shadow : $box-shadow;
 
+  &.active {
+    box-shadow : $box-shadow-lg;
+  }
   &.chat-free {
     position : fixed;
   }

@@ -30,8 +30,8 @@
       </button>
       
       <div ref="container">
-        <chat-pane each={ chat, i in getChats() } if={ !chat.get('style') } on-close={ onCloseChat } chat={ chat } i={ i } class="chat-pane chat-pane-{ i }" data-chat={ chat.get('uuid') } />
-        <chat-pane each={ chat, i in getChats(true) } if={ chat.get('style') } on-close={ onCloseChat } chat={ chat } i={ i } class="chat-pane chat-free" data-chat={ chat.get('uuid') } style="top: { chat.get('style.top') }; left: { chat.get('style.left') };{ chat.get('style.z-index') ? 'z-index: ' + chat.get('style.z-index') + ';' : '' }" onclick={ onActivate }  />
+        <chat-pane each={ chat, i in getChats() } if={ !chat.get('style') } on-close={ onChatClose } on-read={ onChatRead } on-activate={ onChatActivate } chat={ chat } i={ i } class="chat-pane chat-pane-{ i } { chat.get('active') ? 'active' : '' }" data-chat={ chat.get('uuid') } onclick={ onChatActivate } />
+        <chat-pane each={ chat, i in getChats(true) } if={ chat.get('style') } on-close={ onChatClose } on-read={ onChatRead } on-activate={ onChatActivate } chat={ chat } i={ i } class="chat-pane chat-free { chat.get('active') ? 'active' : '' }" data-chat={ chat.get('uuid') } style="top: { chat.get('style.top') }; left: { chat.get('style.left') };{ chat.get('style.z-index') ? 'z-index: ' + chat.get('style.z-index') + ';' : '' }" onclick={ onChatActivate } />
       </div>
     </div>
   </div>
@@ -83,14 +83,66 @@
      *
      * @param  {Chat} chat
      */
-    async onCloseChat(chat) {      
+    async onChatClose(chat) {      
       // filter chats
       this.chats = this.chats.filter((c) => c.get('id') !== chat.get('id'));
       
       // set opened
-      await socket.call('chat.user.set', chat.get('id'), 'opened', false);
       await socket.call('chat.user.set', chat.get('id'), 'style', null);
-      await socket.call('chat.user.set', chat.get('id'), 'closed', false);
+      await socket.call('chat.user.set', chat.get('id'), 'opened', false);
+      await socket.call('chat.user.set', chat.get('id'), 'minimised', false);
+    }
+    
+    /**
+     * on read
+     *
+     * @param  {EdenModel} chat
+     *
+     * @return {Promise}
+     */
+    async onChatRead(chat) {
+      // set read
+      chat.set('read', new Date());
+      chat.set('unread', 0);
+      
+      // call socket
+      socket.call('chat.read', chat.get('id'), chat.get('read'));
+      
+      // update view
+      this.update();
+    }
+    
+    /**
+     * on activate
+     *
+     * @param  {Event} e
+     */
+    async onChatActivate(e) {
+      // get chat
+      const chat = (e.item || {}).chat || e;
+        
+      // get chats
+      chat.set('active', true);
+      if (chat.get('style')) chat.set('style.z-index', 100 + this.getChats(true).length);
+      
+      // move down next top chat
+      this.chats.filter((c) => c.get('id') !== chat.get('id')).forEach((c) => {
+        // set z-index
+        if (c.get('style.z-index')) c.set('style.z-index', c.get('style.z-index') === 100 ? 100 : c.get('style.z-index') - 1);
+        c.set('active', false);
+        
+        // set chat style
+        if (chat.get('style')) socket.call('chat.user.set', c.get('id'), 'style', c.get('style'));
+      });
+      
+      // set chat style
+      if (chat.get('style')) await socket.call('chat.user.set', chat.get('id'), 'style', chat.get('style'));
+      
+      // set opened
+      await socket.call('chat.user.set', chat.get('id'), 'opened', true);
+      
+      // on read
+      this.onChatRead(chat);
     }
     
     /**
@@ -120,34 +172,6 @@
         // send message
         this.onSearch(e);
       }
-    }
-    
-    /**
-     * on activate
-     *
-     * @param  {Event} e
-     */
-    onActivate(e) {
-      // get chat
-      const chat = (e.item || {}).chat || e;
-        
-      // get chats
-      chat.set('style.z-index', 100 + this.getChats(true).length);
-      
-      // move down next top chat
-      this.getChats(true).filter((c) => c.get('id') !== chat.get('id')).forEach((c) => {
-        // set z-index
-        if (c.get('style.z-index')) c.set('style.z-index', c.get('style.z-index') === 100 ? 100 : c.get('style.z-index') - 1);
-        
-        // set chat style
-        socket.call('chat.user.set', c.get('id'), 'style', c.get('style'));
-      });
-      
-      // set chat style
-      socket.call('chat.user.set', chat.get('id'), 'style', chat.get('style'));
-      
-      // update view
-      this.update();
     }
     
     /**
@@ -269,7 +293,7 @@
         });
         
         // activate chat
-        this.onActivate(chat);
+        this.onChatActivate(chat);
         
         // update view
         this.update();

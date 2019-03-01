@@ -12,6 +12,7 @@ const Chat    = model('chat');
 const File    = model('file');
 const User    = model('user');
 const Image   = model('image');
+const CUser   = model('chatUser');
 const Message = model('chatMessage');
 
 // require helpers
@@ -97,9 +98,13 @@ class ChatController extends Controller {
    */
   async chatsAction(opts) {
     // search users
-    const chats = await Chat.where({
-      [`${opts.user.get('_id').toString()}.opened`] : true,
-    }).find();
+    const chats = await Promise.all((await CUser.where({
+      'user.id' : opts.user.get('_id').toString(),
+    }).or({
+      opened : true,
+    }, {
+      opened : null,
+    }).find()).map(cUser => cUser.get('chat')));
 
     // sanitise users
     return await Promise.all(chats.map(chat => chat.sanitise(opts.user)));
@@ -140,17 +145,29 @@ class ChatController extends Controller {
       if (!data.prevent) await chat.save();
     });
 
+    // loop users
+    await Promise.all(users.map(async (user) => {
+      // user stuff
+      const cUser = await CUser.findOne({
+        'chat.id' : chat.get('_id').toString(),
+        'user.id' : user.get('_id').toString(),
+      }) || new CUser({
+        chat,
+        user,
+      });
+
+      // save cuser
+      await cUser.save();
+    }));
+
     // hooks
     if (!chat.get('_id')) return null;
 
-    // emit created
-    users.forEach(async (user) => {
-      // emit
-      socket.user(user, 'chat.create', await chat.sanitise(user));
-    });
-
     // emit
     this.eden.emit('eden.chat.create', await chat.sanitise(), true);
+
+    // emit
+    socket.user(opts.user, 'chat.create', await chat.sanitise(opts.user));
 
     // return chat
     return await chat.sanitise(opts.user);
@@ -171,18 +188,28 @@ class ChatController extends Controller {
     // load chat
     const chat = await Chat.findById(id);
 
+    // user stuff
+    const cUser = await CUser.findOne({
+      'chat.id' : chat.get('_id').toString(),
+      'user.id' : opts.user.get('_id').toString(),
+    }) || new CUser({
+      chat,
+
+      user : opts.user,
+    });
+
     // set style
-    chat.set(`${opts.user.get('_id').toString()}.${key}`, value);
+    cUser.set(key, value);
 
     // set data
     const data = {};
 
     // await hook
     await this.eden.hook('eden.chat.set', {
-      chat, data, key, value, opts,
+      chat, data, key, value, opts, cUser,
     }, async () => {
       // save message
-      if (!data.prevent) await chat.save();
+      if (!data.prevent) await cUser.save();
     });
 
     // hooks
@@ -190,7 +217,7 @@ class ChatController extends Controller {
 
     // emit to socket
     socket.user(opts.user, `model.update.chat.${chat.get('_id').toString()}`, {
-      [key] : chat.get(`${opts.user.get('_id').toString()}.${key}`),
+      [key] : cUser.get(key),
     });
 
     // return chat
@@ -211,6 +238,7 @@ class ChatController extends Controller {
   async messageAction(id, data, opts) {
     // load chat
     const chat = await Chat.findById(id);
+    const users = await chat.get('users');
 
     // create message
     const message = new Message({
@@ -249,6 +277,44 @@ class ChatController extends Controller {
     // check id
     if (!message.get('_id')) return null;
 
+    // loop users
+    await Promise.all(users.map(async (user) => {
+      // get chat user
+      const cUser = await CUser.findOne({
+        'chat.id' : chat.get('_id').toString(),
+        'user.id' : user.get('_id').toString(),
+      }) || new CUser({
+        chat,
+        user,
+      });
+
+      // set value
+      cUser.set('unread', await Message.where({
+        'chat.id' : chat.get('_id').toString(),
+      }).ne('from.id', user.get('_id').toString()).gte('created_at', new Date(cUser.get('read') || 0)).count());
+
+      // let emitOpen
+      let emitOpen = false;
+
+      // create chat
+      if (!cUser.get('opened')) {
+        // emit
+        emitOpen = true;
+
+        // unset cloased
+        cUser.set('opened', new Date());
+      }
+
+      // save cuser
+      await cUser.save();
+
+      // emit
+      if (emitOpen) socket.user(user, 'chat.create', await chat.sanitise(user));
+    }));
+
+    // save chat
+    await chat.save();
+
     // sanitise message
     const sanitised = await message.sanitise();
 
@@ -258,8 +324,105 @@ class ChatController extends Controller {
     // emit to socket
     socket.room(`chat.${chat.get('_id').toString()}`, `chat.${chat.get('_id').toString()}.message`, sanitised);
 
+    // loop users
+    users.forEach(async (user) => {
+      // get chat user
+      const cUser = await CUser.findOne({
+        'chat.id' : chat.get('_id').toString(),
+        'user.id' : user.get('_id').toString(),
+      }) || new CUser();
+
+      // emit to socket
+      socket.user(user, `model.update.chat.${chat.get('_id').toString()}`, {
+        unread : cUser.get('unread') || 0,
+      });
+    });
+
     // return chat
     return await message.sanitise();
+  }
+
+  /**
+   * update chat action
+   *
+   * @param  {String} id
+   * @param  {String} key
+   * @param  {*}      value
+   * @param  {Object} opts
+   *
+   * @call   chat.read
+   * @return {Promise}
+   */
+  async readAction(id, read, opts) {
+    // load chat
+    const chat = await Chat.findById(id);
+
+    // get chat user
+    const cUser = await CUser.findOne({
+      'chat.id' : chat.get('_id').toString(),
+      'user.id' : opts.user.get('_id').toString(),
+    }) || new CUser({
+      chat,
+
+      user : opts.user,
+    });
+
+    // set read
+    cUser.set('read', new Date());
+    cUser.set('unread', await Message.where({
+      'chat.id' : chat.get('_id').toString(),
+    }).ne('from.id', opts.user.get('_id').toString()).gt('created_at', new Date(cUser.get('read') || 0)).count());
+
+    // save chat
+    await cUser.save();
+
+    // emit to socket
+    socket.user(opts.user, `model.update.chat.${chat.get('_id').toString()}`, {
+      unread : cUser.get('unread'),
+    });
+  }
+
+  /**
+   * update chat action
+   *
+   * @param  {String}  id
+   * @param  {Boolean} isTyping
+   * @param  {*}       value
+   * @param  {Object}  opts
+   *
+   * @call   chat.typing
+   * @return {Promise}
+   */
+  async typingAction(id, isTyping, opts) {
+    // load chat
+    const chat = await Chat.findById(id);
+
+    // set typing
+    if (isTyping) {
+      // set typing
+      chat.set(`typing.${opts.user.get('_id').toString()}`, new Date());
+    } else {
+      // unset typing
+      chat.unset(`typing.${opts.user.get('_id').toString()}`);
+    }
+
+    // save chat
+    await chat.save();
+
+    // sanitise chat
+    const sanitised = await chat.sanitise();
+
+    // emit to socket
+    socket.room(`chat.${chat.get('_id').toString()}`, `chat.${chat.get('_id').toString()}.typing`, sanitised.typing.map((item) => {
+      // return item
+      return {
+        user : item.user,
+        when : item.when.getTime() - ((new Date()).getTime() - 5 * 1000),
+      };
+    }));
+
+    // return typing
+    return chat.get(`typing.${opts.user.get('_id').toString()}`);
   }
 
 

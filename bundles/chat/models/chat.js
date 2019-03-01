@@ -3,6 +3,7 @@
 const Model = require('model');
 
 // require messages
+const CUser   = model('chatUser');
 const Message = model('chatMessage');
 
 /**
@@ -43,15 +44,30 @@ class Chat extends Model {
     };
 
     // if user
-    if (user) {
+    if (user && this.get('_id')) {
       // user stuff
-      const userStuff = this.get(user.get('_id').toString()) || {};
+      const userStuff = await CUser.findOne({
+        'chat.id' : this.get('_id').toString(),
+        'user.id' : user.get('_id').toString(),
+      }) || new CUser();
 
       // loop user stuff
-      Object.keys(userStuff).forEach((key) => {
+      Object.keys(userStuff.get()).filter(key => !['chat', 'user', 'created_at', 'updated_at'].includes(key)).forEach((key) => {
         sanitised[key] = userStuff[key];
       });
     }
+
+    // typing
+    sanitised.typing = Object.keys(this.get('typing') || {}).filter((id) => {
+      // return date greater than 5 secons
+      return this.get(`typing.${id}`) > new Date((new Date()).getTime() - (5 * 1000));
+    }).map((id) => {
+      // return typing
+      return {
+        user : id,
+        when : new Date(this.get(`typing.${id}`)),
+      };
+    });
 
     // await hook
     await this.eden.hook('chat.sanitise', {

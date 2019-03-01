@@ -1,9 +1,12 @@
 <chat-pane>
-  <div class="card card-chat{ this.chat.get('closed') ? ' chat-closed' : ' chat-open' }">
+  <div class="card card-chat{ this.chat.get('minimised') ? ' chat-closed' : ' chat-open' }">
     <div class="card-header">
       <div class="row row-eq-height">
         <div class="col-7 d-flex align-items-center">
           <div class="w-100 text-overflow">
+            <span class="badge badge-success" if={ this.chat.get('unread') }>
+              { this.chat.get('unread') }
+            </span>
             { getUsernames() }
           </div>
         </div>
@@ -13,7 +16,7 @@
               <i class="fa fa-undo" />
             </button>
             <button class="btn btn-secondary" onclick={ onToggleOpen }>
-              <i class="fa fa-{ this.chat.get('closed') ? 'plus' : 'minus' }" />
+              <i class="fa fa-{ this.chat.get('minimised') ? 'plus' : 'minus' }" />
             </button>
             <button class="btn btn-danger" onclick={ onClose }>
               <i class="fa fa-times" />
@@ -22,14 +25,15 @@
         </div>
       </div>
     </div>
-    <div class="card-body" show={ !this.chat.get('closed') } ref="messages">
+    <div class="card-body" show={ !this.chat.get('minimised') } ref="messages">
       <ul>
         
         <li each={ message, i in this.messages } data-is="chat-message" class="clearfix" chat={ chat } message={ message } />
         
       </ul>
+      <small if={ this.getTyping().length }>{ this.getTyping() }</small>
     </div>
-    <div class="card-footer p-2" show={ !this.chat.get('closed') }>
+    <div class="card-footer p-2" show={ !this.chat.get('minimised') }>
       <div ref="embeds" if={ this.embeds.length } class="mb-2 chat-embeds">
         <div each={ embed, i in this.embeds } class="embed" style="{ embed.type === 'image' ? 'background-image:url(' + embed.thumb + ');' : '' }" title={ embed.name }>
           <i class="fa { embed.icon }" />
@@ -64,10 +68,12 @@
     // do mixin
     this.mixin('user');
     this.mixin('media');
+    this.mixin('config');
 
     // set chat
     this.chat     = opts.chat;
     this.embeds   = [];
+    this.typing   = this.chat.get('typing') || [];
     this.loading  = [];
     this.messages = this.chat.get('messages') || [];
     
@@ -137,13 +143,16 @@
         this.update();
         
         // set chat style
-        socket.call('chat.message', this.chat.get('id'), Object.assign({}, message, {
+        await socket.call('chat.message', this.chat.get('id'), Object.assign({}, message, {
           embeds : images.map((image) => image.id),
         }));
       } else {
         // set chat style
-        socket.call('chat.message', this.chat.get('id'), message);
+        await socket.call('chat.message', this.chat.get('id'), message);
       }
+      
+      // set typing
+      await socket.call('chat.typing', opts.chat.get('id'), false);
     }
     
     /**
@@ -230,7 +239,16 @@
       // enter pressed
       if ((e.keyCode ? e.keyCode : e.which) === 13) {
         // send message
-        this.onSend(e);
+        return this.onSend(e);
+      }
+      
+      // set typing
+      if ((this.refs.message.value || '').trim().length) {
+        // set typing
+        socket.call('chat.typing', opts.chat.get('id'), true);
+      } else {
+        // clear typing
+        socket.call('chat.typing', opts.chat.get('id'), false);
       }
     }
     
@@ -269,10 +287,10 @@
       e.stopPropagation();
       
       // on toggle open
-      this.chat.set('closed', !this.chat.get('closed'));
+      this.chat.set('minimised', !this.chat.get('minimised'));
       
       // set chat style
-      socket.call('chat.user.set', this.chat.get('id'), 'closed', this.chat.get('closed'));
+      socket.call('chat.user.set', this.chat.get('id'), 'minimised', this.chat.get('minimised'));
       
       // update view
       this.update();
@@ -285,7 +303,7 @@
      *
      * @return {*}
      */
-    onMessage(message) {
+    async onMessage(message) {
       // check found
       const found = this.messages.find(m => m.uuid === message.uuid);
       
@@ -301,11 +319,69 @@
         this.messages.push(message);
       }
       
+      // on read
+      if (opts.chat.get('active')) {
+        // on read
+        opts.onRead(opts.chat);
+      } else {
+        // flash title
+        
+      }
+      
       // update view
       this.update();
       
       // scroll to bottom
       this.refs.messages.scrollTop = this.refs.messages.scrollHeight;
+    }
+    
+    /**
+     * on typing
+     *
+     * @param  {Array} typing
+     *
+     * @return {*}
+     */
+    onTyping(typing) {
+      // check timeout
+      let timeout = null;
+      
+      // set dates
+      this.typing = typing.filter((item) => item.when > 0).map((item) => {
+        // timeout
+        if (!timeout || timeout > item.when) timeout = item.when;
+
+        // return item
+        return {
+          user : item.user,
+          when : new Date((new Date()).getTime() + item.when),
+        };
+      }).filter((item) => {
+        // return when
+        return item.when > new Date((new Date()).getTime() - (5 * 1000));
+      });
+      
+      // clear timeout
+      clearTimeout(this.__typing);
+      
+      // set timeout
+      if (timeout) {
+        // timeout
+        this.__typing = setTimeout(() => {
+          // set typing again
+          this.onTyping(typing.map((item) => {
+            // return altered item
+            return {
+              user : item.user,
+              when : item.when - timeout,
+            };
+          }));
+        }, timeout + 100);
+      }
+      
+      // update view
+      this.update();
+      this.scrollbar.update();
     }
     
     /**
@@ -316,6 +392,43 @@
     getUsernames() {
       // return usernames
       return this.chat.get('users').filter((user) => user.id !== this.user.get('id')).map((user) => user.username).join(', ');
+    }
+    
+    /**
+     * gets usernames
+     *
+     * @return {*}
+     */
+    getTyping() {
+      // return usernames
+      const typing = this.typing.filter(indicator => indicator.user !== this.user.get('id')).map((item) => {
+        // find user
+        const user = this.chat.get('users').find((user) => {
+          // return user
+          return user.id === item.user;
+        });
+        
+        // return user
+        if (!user) return;
+        
+        // return username
+        return user.username;
+      }).filter((item) => item);
+      
+      // set typing
+      if (typing.length === 1) {
+        // is typing
+        return `${typing[0]} is typing...`;
+      } else if (typing.length > 4) {
+        // many people
+        return `many people are typing...`;
+      } else if (typing.length) {
+        // return typing
+        return `typing.join(', ').replace(/,(?!.*,)/gmi, ' and') are typing...`;
+      }
+      
+      // return joined typing
+      return '';
     }
 
     /**
@@ -444,12 +557,12 @@
       }
       
       // set scroll height
-      this.refs.messages.scrollTop = this.refs.messages.scrollHeight;
+      if (this.refs.messages) this.refs.messages.scrollTop = this.refs.messages.scrollHeight;
       
       // scroll to bottom
       setTimeout(() => {
         // set scroll height
-        this.refs.messages.scrollTop = this.refs.messages.scrollHeight;
+        if (this.refs.messages) this.refs.messages.scrollTop = this.refs.messages.scrollHeight;
       }, 100);
       
       // check embeds
@@ -468,6 +581,7 @@
       if (!this.eden.frontend || !this.user.exists()) return;
       
       // on created
+      socket.on(`chat.${this.chat.get('id')}.typing`, this.onTyping);
       socket.on(`chat.${this.chat.get('id')}.message`, this.onMessage);
       
       // scroll to bottom
@@ -489,6 +603,7 @@
       if (!this.eden.frontend) return;
       
       // on created
+      socket.off(`chat.${this.chat.get('id')}.typing`, this.onTyping);
       socket.off(`chat.${this.chat.get('id')}.message`, this.onMessage);
     });
     
