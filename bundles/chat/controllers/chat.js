@@ -98,13 +98,13 @@ class ChatController extends Controller {
    */
   async chatsAction(opts) {
     // search users
-    const chats = await Promise.all((await CUser.where({
+    const chats = (await Promise.all((await CUser.where({
       'user.id' : opts.user.get('_id').toString(),
     }).or({
       opened : true,
     }, {
       opened : null,
-    }).find()).map(cUser => cUser.get('chat'))).filter(chat => chat);
+    }).find()).map(cUser => cUser.get('chat')))).filter(chat => chat);
 
     // sanitise users
     return await Promise.all(chats.map(chat => chat.sanitise(opts.user)));
