@@ -1,5 +1,5 @@
 <chat>
-  <div if={ this.user.exists() } class={ 'chat' : true, 'd-none' : !this.eden.frontend } style="right:{ this.offset || 0 }px">
+  <div if={ this.user.exists() } class={ 'chat' : true, 'd-none' : !this.eden.frontend }>
     <div class="chat-chats { 'is-open' : this.open }">
     
       <div class={ 'card card-chats mb-3' : true, 'd-none' : !this.open }>
@@ -358,11 +358,6 @@
     this.on('mount', () => {
       // check frontend
       if (!this.eden.frontend || !this.user.exists()) return;
-      
-      // get sidebar width
-      this.offset = this.root.parentNode.offsetWidth - this.root.parentNode.clientWidth;
-      if (this.offset > 25) this.offset = 0;
-      this.update();
       
       // setup dragula
       this.dragula();
