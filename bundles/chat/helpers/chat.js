@@ -61,11 +61,7 @@ class ChatHelper extends Helper {
     // return chats by member
     return (await Promise.all((await CUser.where({
       'member.id' : member.get('_id').toString(),
-    }).or({
-      opened : true,
-    }, {
-      opened : null,
-    }).find()).map(cUser => cUser.get('chat')))).filter(chat => chat);
+    }).ne('opened', false).find()).map(cUser => cUser.get('chat')))).filter(chat => chat);
   }
 
   /**
@@ -78,7 +74,16 @@ class ChatHelper extends Helper {
    */
   async create(member, members) {
     // set ids
-    const ids =  members.map(m => m.get('_id').toString()).sort();
+    const ids = (members.map(m => m.get('_id').toString()).sort()).reduce((accum, id) => {
+      // check id in array
+      if (!accum.includes(id)) accum.push(id);
+
+      // return accum
+      return accum;
+    }, []);
+
+    // no chats with one user
+    if (ids.length === 1) return;
 
     // load chat
     const chat = await Chat.where({

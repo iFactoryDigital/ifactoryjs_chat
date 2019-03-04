@@ -113,7 +113,7 @@ class ChatController extends Controller {
     });
 
     // sanitise users
-    return await Promise.all(users.map(user => user.sanitise()));
+    return await Promise.all(users.filter(user => user.get('_id').toString() !== opts.user.get('_id').toString()).map(user => user.sanitise()));
   }
 
 

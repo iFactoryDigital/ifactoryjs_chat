@@ -88,6 +88,9 @@
       this.chats = this.chats.filter((c) => c.get('id') !== chat.get('id'));
       
       // set opened
+      chat.set('opened', false);
+      
+      // set opened
       await socket.call('chat.member.set', chat.get('id'), 'style', null);
       await socket.call('chat.member.set', chat.get('id'), 'opened', false);
       await socket.call('chat.member.set', chat.get('id'), 'minimised', false);
@@ -229,7 +232,7 @@
       // filter chat
       return this.chats.filter((chat) => {
         // check style
-        return free && chat.get('style') || !free && !chat.get('style');
+        return chat.get('opened') && free && chat.get('style') || !free && !chat.get('style');
       });
     }
     
