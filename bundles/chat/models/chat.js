@@ -32,7 +32,7 @@ class Chat extends Model {
       id       : this.get('_id') ? this.get('_id').toString() : null,
       uuid     : this.get('uuid'),
       hash     : this.get('hash'),
-      users    : await Promise.all((await this.get('users') || []).map(u => u.sanitise())),
+      members  : await Promise.all((await this.get('members') || []).map(u => u.sanitise())),
       messages : (await Promise.all((await Message.where({
         'chat.id' : this.get('_id') ? this.get('_id').toString() : null,
       }).sort('created_at', -1).limit(25).find()).map((message) => {
@@ -64,8 +64,8 @@ class Chat extends Model {
     }).map((id) => {
       // return typing
       return {
-        user : id,
-        when : new Date(this.get(`typing.${id}`)),
+        when   : new Date(this.get(`typing.${id}`)),
+        member : id,
       };
     });
 

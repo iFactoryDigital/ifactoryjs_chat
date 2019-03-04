@@ -1,19 +1,12 @@
 
 // Require dependencies
-const uuid        = require('uuid');
-const socket      = require('socket');
-const toText      = require('html-to-text');
-const autolinker  = require('autolinker');
 const Controller  = require('controller');
 const escapeRegex = require('escape-string-regexp');
 
 // Require models
-const Chat    = model('chat');
-const File    = model('file');
-const User    = model('user');
-const Image   = model('image');
-const CUser   = model('chatUser');
-const Message = model('chatMessage');
+const Chat  = model('chat');
+const User  = model('user');
+const CUser = model('chatUser');
 
 // require helpers
 const chatHelper = helper('chat');
@@ -98,13 +91,7 @@ class ChatController extends Controller {
    */
   async chatsAction(opts) {
     // search users
-    const chats = (await Promise.all((await CUser.where({
-      'user.id' : opts.user.get('_id').toString(),
-    }).or({
-      opened : true,
-    }, {
-      opened : null,
-    }).find()).map(cUser => cUser.get('chat')))).filter(chat => chat);
+    const chats = await chatHelper.all(opts.user);
 
     // sanitise users
     return await Promise.all(chats.map(chat => chat.sanitise(opts.user)));
@@ -123,51 +110,8 @@ class ChatController extends Controller {
     // get users
     const users = await Promise.all(ids.map(user => User.findById(user)));
 
-    // load chat
-    const chat = await Chat.where({
-      hash : users.map(user => user.get('_id').toString()).sort().join(':'),
-    }).findOne() || new Chat({
-      users,
-
-      uuid    : uuid(),
-      hash    : users.map(user => user.get('_id').toString()).sort().join(':'),
-      creator : opts.user,
-    });
-
-    // set data
-    const data = {};
-
-    // await hook
-    await this.eden.hook('eden.chat.create', {
-      ids, chat, data, opts,
-    }, async () => {
-      // save message
-      if (!data.prevent) await chat.save();
-    });
-
-    // loop users
-    await Promise.all(users.map(async (user) => {
-      // user stuff
-      const cUser = await CUser.findOne({
-        'chat.id' : chat.get('_id').toString(),
-        'user.id' : user.get('_id').toString(),
-      }) || new CUser({
-        chat,
-        user,
-      });
-
-      // save cuser
-      await cUser.save();
-    }));
-
-    // hooks
-    if (!chat.get('_id')) return null;
-
-    // emit
-    this.eden.emit('eden.chat.create', await chat.sanitise(), true);
-
-    // emit
-    socket.user(opts.user, 'chat.create', await chat.sanitise(opts.user));
+    // create chat
+    const chat = await chatHelper.create(opts.user, users);
 
     // return chat
     return await chat.sanitise(opts.user);
@@ -188,37 +132,8 @@ class ChatController extends Controller {
     // load chat
     const chat = await Chat.findById(id);
 
-    // user stuff
-    const cUser = await CUser.findOne({
-      'chat.id' : chat.get('_id').toString(),
-      'user.id' : opts.user.get('_id').toString(),
-    }) || new CUser({
-      chat,
-
-      user : opts.user,
-    });
-
-    // set style
-    cUser.set(key, value);
-
-    // set data
-    const data = {};
-
-    // await hook
-    await this.eden.hook('eden.chat.set', {
-      chat, data, key, value, opts, cUser,
-    }, async () => {
-      // save message
-      if (!data.prevent) await cUser.save();
-    });
-
-    // hooks
-    if (!chat.get('_id')) return null;
-
-    // emit to socket
-    socket.user(opts.user, `model.update.chat.${chat.get('_id').toString()}`, {
-      [key] : cUser.get(key),
-    });
+    // cuser
+    await chatHelper.member.set(opts.user, chat, key, value);
 
     // return chat
     return await chat.sanitise(opts.user);
@@ -238,105 +153,9 @@ class ChatController extends Controller {
   async messageAction(id, data, opts) {
     // load chat
     const chat = await Chat.findById(id);
-    const users = await chat.get('users');
 
-    // create message
-    const message = new Message({
-      chat,
-
-      from    : opts.user,
-      uuid    : data.uuid,
-      message : autolinker.link(toText.fromString(data.message)),
-    });
-
-    // check embeds
-    if (data.embeds) {
-      // loop embeds
-      const embeds = (await Promise.all(data.embeds.map(async (embed) => {
-        try {
-          // await
-          return await File.findById(embed) || await Image.findById(embed);
-        } catch (e) {}
-
-        // return null
-        return null;
-      }))).filter(e => e);
-
-      // set embeds
-      message.set('embeds', embeds);
-    }
-
-    // await hook
-    await this.eden.hook('eden.chat.message', {
-      data, message, id, opts,
-    }, async () => {
-      // save message
-      if (!data.prevent) await message.save();
-    });
-
-    // check id
-    if (!message.get('_id')) return null;
-
-    // loop users
-    await Promise.all(users.map(async (user) => {
-      // get chat user
-      const cUser = await CUser.findOne({
-        'chat.id' : chat.get('_id').toString(),
-        'user.id' : user.get('_id').toString(),
-      }) || new CUser({
-        chat,
-        user,
-      });
-
-      // set value
-      cUser.set('unread', await Message.where({
-        'chat.id' : chat.get('_id').toString(),
-      }).ne('from.id', user.get('_id').toString()).gte('created_at', new Date(cUser.get('read') || 0)).count());
-
-      // let emitOpen
-      let emitOpen = false;
-
-      // create chat
-      if (!cUser.get('opened')) {
-        // emit
-        emitOpen = true;
-
-        // unset cloased
-        cUser.set('opened', new Date());
-      }
-
-      // save cuser
-      await cUser.save();
-
-      // emit
-      if (emitOpen) socket.user(user, 'chat.create', await chat.sanitise(user));
-    }));
-
-    // save chat
-    await chat.save();
-
-    // sanitise message
-    const sanitised = await message.sanitise();
-
-    // emit
-    this.eden.emit('eden.chat.message', sanitised, true);
-
-    // emit to socket
-    socket.room(`chat.${chat.get('_id').toString()}`, `chat.${chat.get('_id').toString()}.message`, sanitised);
-
-    // loop users
-    users.forEach(async (user) => {
-      // get chat user
-      const cUser = await CUser.findOne({
-        'chat.id' : chat.get('_id').toString(),
-        'user.id' : user.get('_id').toString(),
-      }) || new CUser();
-
-      // emit to socket
-      socket.user(user, `model.update.chat.${chat.get('_id').toString()}`, {
-        unread : cUser.get('unread') || 0,
-      });
-    });
+    // send message
+    const message = await chatHelper.message.send(opts.user, chat, data);
 
     // return chat
     return await message.sanitise();
@@ -357,29 +176,11 @@ class ChatController extends Controller {
     // load chat
     const chat = await Chat.findById(id);
 
-    // get chat user
-    const cUser = await CUser.findOne({
-      'chat.id' : chat.get('_id').toString(),
-      'user.id' : opts.user.get('_id').toString(),
-    }) || new CUser({
-      chat,
-
-      user : opts.user,
-    });
-
     // set read
-    cUser.set('read', new Date());
-    cUser.set('unread', await Message.where({
-      'chat.id' : chat.get('_id').toString(),
-    }).ne('from.id', opts.user.get('_id').toString()).gt('created_at', new Date(cUser.get('read') || 0)).count());
+    await chatHelper.member.read(opts.user, chat, read);
 
-    // save chat
-    await cUser.save();
-
-    // emit to socket
-    socket.user(opts.user, `model.update.chat.${chat.get('_id').toString()}`, {
-      unread : cUser.get('unread'),
-    });
+    // return sanitised
+    return await chat.sanitise(opts.user);
   }
 
   /**
@@ -397,29 +198,8 @@ class ChatController extends Controller {
     // load chat
     const chat = await Chat.findById(id);
 
-    // set typing
-    if (isTyping) {
-      // set typing
-      chat.set(`typing.${opts.user.get('_id').toString()}`, new Date());
-    } else {
-      // unset typing
-      chat.unset(`typing.${opts.user.get('_id').toString()}`);
-    }
-
-    // save chat
-    await chat.save();
-
-    // sanitise chat
-    const sanitised = await chat.sanitise();
-
-    // emit to socket
-    socket.room(`chat.${chat.get('_id').toString()}`, `chat.${chat.get('_id').toString()}.typing`, sanitised.typing.map((item) => {
-      // return item
-      return {
-        user : item.user,
-        when : item.when.getTime() - ((new Date()).getTime() - 5 * 1000),
-      };
-    }));
+    // await typing
+    await chatHelper.member.typing(opts.user, chat, isTyping);
 
     // return typing
     return chat.get(`typing.${opts.user.get('_id').toString()}`);
