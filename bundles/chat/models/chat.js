@@ -47,8 +47,8 @@ class Chat extends Model {
     if (user && this.get('_id')) {
       // user stuff
       const userStuff = await CUser.findOne({
-        'chat.id' : this.get('_id').toString(),
-        'user.id' : user.get('_id').toString(),
+        'chat.id'   : this.get('_id').toString(),
+        'member.id' : user.get('_id').toString(),
       }) || new CUser();
 
       // loop user stuff

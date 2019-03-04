@@ -8,6 +8,8 @@ const autolinker  = require('autolinker');
 
 // require models
 const Chat    = model('chat');
+const File    = model('file');
+const Image   = model('image');
 const CUser   = model('chatUser');
 const Message = model('chatMessage');
 
@@ -205,7 +207,7 @@ class ChatHelper extends Helper {
     cUser.set('read', new Date(read));
     cUser.set('unread', await Message.where({
       'chat.id' : chat.get('_id').toString(),
-    }).ne('from.id', member.user.get('_id').toString()).gt('created_at', new Date(cUser.get('read') || 0)).count());
+    }).ne('from.id', member.get('_id').toString()).gt('created_at', new Date(cUser.get('read') || 0)).count());
 
     // save chat
     await cUser.save();
@@ -289,7 +291,7 @@ class ChatHelper extends Helper {
    */
   async messageSend(member, chat, data) {
     // get chat users
-    const users = await chat.get('users');
+    const members = await chat.get('members') || [];
 
     // create message
     const message = new Message({
@@ -302,12 +304,15 @@ class ChatHelper extends Helper {
 
     // check embeds
     if (data.embeds) {
+      // allow one
+      if (!Array.isArray(data.embeds)) data.embeds = [data.embeds];
+
       // loop embeds
       const embeds = (await Promise.all(data.embeds.map(async (embed) => {
         try {
           // await
           return await File.findById(embed) || await Image.findById(embed);
-        } catch (e) {}
+        } catch (e) { console.log(e) }
 
         // return null
         return null;
@@ -329,7 +334,7 @@ class ChatHelper extends Helper {
     if (!message.get('_id')) return null;
 
     // loop users
-    await Promise.all(users.map(async (m) => {
+    await Promise.all(members.map(async (m) => {
       // get chat user
       const cUser = await CUser.findOne({
         'chat.id'   : chat.get('_id').toString(),
@@ -377,7 +382,7 @@ class ChatHelper extends Helper {
     socket.room(`chat.${chat.get('_id').toString()}`, `chat.${chat.get('_id').toString()}.message`, sanitised);
 
     // loop users
-    users.forEach(async (m) => {
+    members.forEach(async (m) => {
       // get chat user
       const cUser = await CUser.findOne({
         'chat.id'   : chat.get('_id').toString(),

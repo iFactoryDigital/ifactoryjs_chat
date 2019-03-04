@@ -19,7 +19,7 @@
           <div class="text-center p-3" if={ this.loading }>
             <i class="fa fa-3x fa-spinner fa-spin" />
           </div>
-          <div each={ user, i in this.users } class="chat-user" onclick={ onChat }>
+          <div each={ user, i in this.members } class="chat-user" onclick={ onChat }>
             { user.username }
           </div>
         </div>
@@ -44,7 +44,7 @@
     // set open
     this.open    = false;
     this.chats   = (opts.chats || []).map(chat => this.model('chat', chat));
-    this.users   = [];
+    this.members = [];
     this.actives = [];
     this.loading = true;
     
@@ -69,7 +69,7 @@
       
       // create chat
       const chat = await socket.call('chat.create', [this.user.get('id'), user.id]);
-      await socket.call('chat.user.set', chat.id, 'opened', true);
+      await socket.call('chat.member.set', chat.id, 'opened', true);
       
       // set loading
       user.loading = false;
@@ -88,9 +88,9 @@
       this.chats = this.chats.filter((c) => c.get('id') !== chat.get('id'));
       
       // set opened
-      await socket.call('chat.user.set', chat.get('id'), 'style', null);
-      await socket.call('chat.user.set', chat.get('id'), 'opened', false);
-      await socket.call('chat.user.set', chat.get('id'), 'minimised', false);
+      await socket.call('chat.member.set', chat.get('id'), 'style', null);
+      await socket.call('chat.member.set', chat.get('id'), 'opened', false);
+      await socket.call('chat.member.set', chat.get('id'), 'minimised', false);
     }
     
     /**
@@ -106,7 +106,7 @@
       chat.set('unread', 0);
       
       // call socket
-      socket.call('chat.read', chat.get('id'), chat.get('read'));
+      socket.call('chat.member.read', chat.get('id'), chat.get('read'));
       
       // update view
       this.update();
@@ -132,14 +132,14 @@
         c.set('active', false);
         
         // set chat style
-        if (chat.get('style')) socket.call('chat.user.set', c.get('id'), 'style', c.get('style'));
+        if (chat.get('style')) socket.call('chat.member.set', c.get('id'), 'style', c.get('style'));
       });
       
       // set chat style
-      if (chat.get('style')) await socket.call('chat.user.set', chat.get('id'), 'style', chat.get('style'));
+      if (chat.get('style')) await socket.call('chat.member.set', chat.get('id'), 'style', chat.get('style'));
       
       // set opened
-      await socket.call('chat.user.set', chat.get('id'), 'opened', true);
+      await socket.call('chat.member.set', chat.get('id'), 'opened', true);
       
       // on read
       this.onChatRead(chat);
@@ -158,7 +158,7 @@
       e.stopPropagation();
       
       // load users
-      this.loadUsers();
+      this.loadMembers();
     }
     
     /**
@@ -179,7 +179,7 @@
      *
      * @return {Promise}
      */
-    async loadUsers() {
+    async loadMembers() {
       // set loading
       this.loading = true;
       
@@ -187,7 +187,7 @@
       this.update();
       
       // load users
-      this.users = await socket.call('chat.users', this.refs.search.value);
+      this.members = await socket.call('chat.members', this.refs.search.value);
       
       // set loading
       this.loading = false;
@@ -209,7 +209,7 @@
       this.update();
       
       // load users
-      this.chats = (await socket.call('chat.chats') || []).map(chat => this.model('chat', chat));
+      this.chats = (await socket.call('chat.all') || []).map(chat => this.model('chat', chat));
       
       // set loading
       this.loading = false;
@@ -363,8 +363,8 @@
       this.dragula();
       
       // load users
-      this.loadUsers();
       this.loadChats();
+      this.loadMembers();
       
       // on created
       socket.on('chat.create', this.onCreated);

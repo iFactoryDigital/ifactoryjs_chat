@@ -37,7 +37,7 @@
      */
     getFrom(message) {
       // return usernames
-      return opts.chat.get('users').find((user) => user.id === message.from);
+      return opts.chat.get('members').find((member) => member.id === message.from);
     }
     
     /**

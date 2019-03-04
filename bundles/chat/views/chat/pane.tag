@@ -143,16 +143,16 @@
         this.update();
         
         // set chat style
-        await socket.call('chat.message', this.chat.get('id'), Object.assign({}, message, {
+        await socket.call('chat.message.send', this.chat.get('id'), Object.assign({}, message, {
           embeds : images.map((image) => image.id),
         }));
       } else {
         // set chat style
-        await socket.call('chat.message', this.chat.get('id'), message);
+        await socket.call('chat.message.send', this.chat.get('id'), message);
       }
       
       // set typing
-      await socket.call('chat.typing', opts.chat.get('id'), false);
+      await socket.call('chat.member.typing', opts.chat.get('id'), false);
     }
     
     /**
@@ -245,10 +245,10 @@
       // set typing
       if ((this.refs.message.value || '').trim().length) {
         // set typing
-        socket.call('chat.typing', opts.chat.get('id'), true);
+        socket.call('chat.member.typing', opts.chat.get('id'), true);
       } else {
         // clear typing
-        socket.call('chat.typing', opts.chat.get('id'), false);
+        socket.call('chat.member.typing', opts.chat.get('id'), false);
       }
     }
     
@@ -268,7 +268,7 @@
       this.chat.set('style', null);
       
       // set chat style
-      socket.call('chat.user.set', this.chat.get('id'), 'style', this.chat.get('style'));
+      socket.call('chat.member.set', this.chat.get('id'), 'style', this.chat.get('style'));
       
       // update
       this.parent.update();
@@ -290,7 +290,7 @@
       this.chat.set('minimised', !this.chat.get('minimised'));
       
       // set chat style
-      socket.call('chat.user.set', this.chat.get('id'), 'minimised', this.chat.get('minimised'));
+      socket.call('chat.member.set', this.chat.get('id'), 'minimised', this.chat.get('minimised'));
       
       // update view
       this.update();
@@ -391,7 +391,7 @@
      */
     getUsernames() {
       // return usernames
-      return this.chat.get('users').filter((user) => user.id !== this.user.get('id')).map((user) => user.username).join(', ');
+      return this.chat.get('members').filter((user) => user.id !== this.user.get('id')).map((user) => user.username).join(', ');
     }
     
     /**
@@ -401,18 +401,18 @@
      */
     getTyping() {
       // return usernames
-      const typing = this.typing.filter(indicator => indicator.user !== this.user.get('id')).map((item) => {
+      const typing = this.typing.filter(indicator => indicator.members !== this.user.get('id')).map((item) => {
         // find user
-        const user = this.chat.get('users').find((user) => {
+        const member = this.chat.get('members').find((member) => {
           // return user
-          return user.id === item.user;
+          return member.id === item.member;
         });
         
         // return user
-        if (!user) return;
+        if (!member) return;
         
         // return username
-        return user.username;
+        return member.username;
       }).filter((item) => item);
       
       // set typing
