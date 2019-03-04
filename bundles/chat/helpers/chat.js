@@ -163,7 +163,7 @@ class ChatHelper extends Helper {
     const data = {};
 
     // await hook
-    await this.eden.hook('eden.chat.set', {
+    await this.eden.hook('eden.chat.member.set', {
       chat, data, key, value, member, cUser,
     }, async () => {
       // save message
@@ -215,6 +215,13 @@ class ChatHelper extends Helper {
       unread : cUser.get('unread'),
     });
 
+    // emit read
+    this.eden.emit('eden.chat.member.read', {
+      id     : chat.get('_id').toString(),
+      when   : cUser.get('read'),
+      member : member.get('_id').toString(),
+    }, true);
+
     // return cuser
     return cUser;
   }
@@ -252,6 +259,13 @@ class ChatHelper extends Helper {
         member : item.member,
       };
     }));
+
+    // emit read
+    this.eden.emit('eden.chat.member.typing', {
+      id       : chat.get('_id').toString(),
+      member   : member.get('_id').toString(),
+      isTyping : chat.get(`typing.${member.get('_id').toString()}`),
+    }, true);
 
     // return typing
     return chat;
