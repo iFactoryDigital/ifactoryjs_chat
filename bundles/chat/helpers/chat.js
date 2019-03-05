@@ -72,7 +72,7 @@ class ChatHelper extends Helper {
    *
    * @return {*}
    */
-  async create(member, members) {
+  async create(member, members, hash = null) {
     // set ids
     const ids = (members.map(m => m.get('_id').toString()).sort()).reduce((accum, id) => {
       // check id in array
@@ -83,16 +83,16 @@ class ChatHelper extends Helper {
     }, []);
 
     // no chats with one user
-    if (ids.length === 1) return;
+    if (ids.length === 1) return null;
 
     // load chat
     const chat = await Chat.where({
-      hash : members.map(m => m.get('_id').toString()).sort().join(':'),
+      hash : hash !== null ? hash : members.map(m => m.get('_id').toString()).sort().join(':'),
     }).findOne() || new Chat({
       members,
 
       uuid    : uuid(),
-      hash    : members.map(m => m.get('_id').toString()).sort().join(':'),
+      hash    : hash !== null ? hash : members.map(m => m.get('_id').toString()).sort().join(':'),
       creator : member,
     });
 
@@ -317,7 +317,7 @@ class ChatHelper extends Helper {
         try {
           // await
           return await File.findById(embed) || await Image.findById(embed);
-        } catch (e) { console.log(e) }
+        } catch (e) { console.log(e); }
 
         // return null
         return null;
