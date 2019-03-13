@@ -4,9 +4,9 @@ const Controller  = require('controller');
 const escapeRegex = require('escape-string-regexp');
 
 // Require models
-const Chat  = model('chat');
-const User  = model('user');
-const CUser = model('chatUser');
+const Chat         = model('chat');
+const ChatMessage  = model('chatMessage');
+const User         = model('user');
 
 // require helpers
 const chatHelper = helper('chat');
@@ -218,6 +218,26 @@ class ChatController extends Controller {
     return await message.sanitise();
   }
 
+  /**
+   * update chat action
+   *
+   * @param  {String} id
+   * @param  {String} react
+   * @param  {Object} opts
+   *
+   * @call   chat.message.react
+   * @return {Promise}
+   */
+  async messageReactAction(id, react, opts) {
+    // load chat
+    const message = await ChatMessage.findById(id);
+
+    // cuser
+    await chatHelper.message.react(opts.user, message, react);
+
+    // return chat
+    return true;
+  }
 
   // ////////////////////////////////////////////////////////////////////////////
   //
@@ -237,7 +257,7 @@ class ChatController extends Controller {
    */
   async listenAction(id, uuid, opts) {
     // / return if no id
-    if (!id) return;
+    if (!id) return null;
 
     // join room
     opts.socket.join(`chat.${id}`);
@@ -257,7 +277,7 @@ class ChatController extends Controller {
    */
   async deafenAction(id, uuid, opts) {
     // / return if no id
-    if (!id) return;
+    if (!id) return null;
 
     // join room
     opts.socket.leave(`chat.${id}`);

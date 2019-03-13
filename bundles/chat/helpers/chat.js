@@ -39,7 +39,10 @@ class ChatHelper extends Helper {
 
     // send message
     this.message = {
-      send : this.messageSend.bind(this),
+      send        : this.messageSend.bind(this),
+      set         : this.messageSet.bind(this),
+      react       : this.messageReact.bind(this),
+      buttonPress : this.messageButtonPress.bind(this),
     };
   }
 
@@ -304,6 +307,7 @@ class ChatHelper extends Helper {
 
       from    : member,
       uuid    : data.uuid,
+      meta    : data.meta,
       message : autolinker.link(toText.fromString(data.message)),
     });
 
@@ -402,6 +406,81 @@ class ChatHelper extends Helper {
 
     // return message
     return message;
+  }
+
+  /**
+   * message set action
+   *
+   * @param  {Chat}   message
+   * @param  {String} key
+   * @param  {*} value
+   *
+   * @return {Promise}
+   */
+  async messageSet(message, key, value) {
+    // set value
+    message.set(key, value);
+
+    const data = {};
+
+    await this.eden.hook('eden.chat.message.set', {
+      data, key, value, message,
+    }, async () => {
+      // save message
+      if (!data.prevent) await message.save();
+    });
+
+    // emit to socket
+    socket.room(`chat.${message.get('chat.id').toString()}`, `model.update.message.${message.get('_id').toString()}`, {
+      [key] : message.get(key),
+    });
+  }
+
+  /**
+   * message react action
+   *
+   * @param  {*}      member
+   * @param  {Chat}   message
+   * @param  {String} react
+   *
+   * @return {Promise}
+   */
+  async messageReact(member, message, react) {
+    // check reaction
+    if (message.get(`react.${react}.${member.get('_id').toString()}`)) {
+      // unset reaction
+      message.unset(`react.${react}.${member.get('_id').toString()}`);
+    } else {
+      // set reaction
+      message.set(`react.${react}.${member.get('_id').toString()}`, new Date());
+    }
+
+    const data = {};
+
+    await this.eden.hook('eden.chat.message.react', {
+      data, react, message, member,
+    }, async () => {
+      // save message
+      if (!data.prevent) await message.save();
+    });
+
+    // emit to socket
+    socket.room(`chat.${message.get('chat.id').toString()}`, `chat.${message.get('chat.id').toString()}.react`, {
+      [`react.${react}.${member.get('_id').toString()}`] : message.get(`react.${react}.${member.get('_id').toString()}`),
+    });
+  }
+
+  /**
+   * message button press action
+   *
+   * @param  {*}      member
+   * @param  {Chat}   message
+   * @param  {String} button
+   *
+   * @return {Promise}
+   */
+  async messageButtonPress(member, message, button) {
+    this.eden.emit('eden.chat.message.buttonPress', { message, button, member });
   }
 }
 
