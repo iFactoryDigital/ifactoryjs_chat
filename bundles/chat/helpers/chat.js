@@ -92,12 +92,13 @@ class ChatHelper extends Helper {
     const chat = await Chat.where({
       hash : hash !== null ? hash : members.map(m => m.get('_id').toString()).sort().join(':'),
     }).findOne() || new Chat({
-      members,
-
       uuid    : uuid(),
       hash    : hash !== null ? hash : members.map(m => m.get('_id').toString()).sort().join(':'),
       creator : member,
     });
+
+    // update members
+    chat.set('members', members);
 
     // set data
     const data = {};
