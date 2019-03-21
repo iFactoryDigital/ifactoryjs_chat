@@ -75,7 +75,7 @@ class ChatHelper extends Helper {
    *
    * @return {*}
    */
-  async create(member, members, hash = null) {
+  async create(member, members, options = null, hash = null) {
     // set ids
     const ids = (members.map(m => m.get('_id').toString()).sort()).reduce((accum, id) => {
       // check id in array
@@ -92,13 +92,19 @@ class ChatHelper extends Helper {
     const chat = await Chat.where({
       hash : hash !== null ? hash : members.map(m => m.get('_id').toString()).sort().join(':'),
     }).findOne() || new Chat({
+      type    : 'public', // as default
       uuid    : uuid(),
       hash    : hash !== null ? hash : members.map(m => m.get('_id').toString()).sort().join(':'),
       creator : member,
     });
 
-    // update members
+    // update chat members
     chat.set('members', members);
+
+    // update chat with all provided options
+    if (options !== null) {
+      chat.set(options);
+    }
 
     // set data
     const data = {};
@@ -310,6 +316,7 @@ class ChatHelper extends Helper {
       uuid    : data.uuid,
       meta    : data.meta,
       message : autolinker.link(toText.fromString(data.message)),
+      raw     : data.message,
     });
 
     // check embeds
@@ -382,14 +389,11 @@ class ChatHelper extends Helper {
     // save chat
     await chat.save();
 
-    // sanitise message
-    const sanitised = await message.sanitise();
-
     // emit
-    this.eden.emit('eden.chat.message', sanitised, true);
+    this.eden.emit('eden.chat.message', await message.sanitise(true), true);
 
     // emit to socket
-    socket.room(`chat.${chat.get('_id').toString()}`, `chat.${chat.get('_id').toString()}.message`, sanitised);
+    socket.room(`chat.${chat.get('_id').toString()}`, `chat.${chat.get('_id').toString()}.message`, await message.sanitise());
 
     // loop users
     members.forEach(async (m) => {

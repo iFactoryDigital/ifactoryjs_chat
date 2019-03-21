@@ -23,7 +23,7 @@ class ChatMessage extends Model {
    *
    * @return {*}
    */
-  async sanitise() {
+  async sanitise(sensitive = false, type) {
     // return object
     const sanitised = {
       id     : this.get('_id') ? this.get('_id').toString() : null,
@@ -45,6 +45,10 @@ class ChatMessage extends Model {
       created_at : this.get('created_at'),
       updated_at : this.get('updated_at'),
     };
+
+    if (sensitive) {
+      sanitised.raw = this.get('raw');
+    }
 
     // await hook
     await this.eden.hook('chatmessage.sanitise', {
