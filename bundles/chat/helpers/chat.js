@@ -312,11 +312,18 @@ class ChatHelper extends Helper {
     const message = new Message({
       chat,
 
-      from    : member,
-      uuid    : data.uuid,
-      meta    : data.meta,
-      message : autolinker.link(toText.fromString(data.message)),
-      raw     : data.message,
+      from      : member,
+      buttons   : data.buttons || [],
+      react     : data.react || {},
+      fields    : data.fields || [],
+      thumbnail : data.thumbnail || null,
+      url       : data.url || null,
+      title     : data.title || null,
+      color     : data.color || null,
+      uuid      : data.uuid,
+      meta      : data.meta || {},
+      message   : autolinker.link(toText.fromString(data.message)),
+      raw       : data.message,
     });
 
     // check embeds
@@ -485,7 +492,14 @@ class ChatHelper extends Helper {
    * @return {Promise}
    */
   async messageButtonPress(member, message, button) {
-    this.eden.emit('eden.chat.message.buttonPress', { message, button, member });
+    const evtData = {
+      button,
+      message : await message.sanitise(true),
+      member  : member.get('_id'),
+    };
+
+    this.eden.emit('eden.chat.message.buttonPress', evtData, true);
+    this.eden.emit(`eden.chat.message.buttonPress.${message.get('_id')}`, evtData, true);
   }
 }
 
