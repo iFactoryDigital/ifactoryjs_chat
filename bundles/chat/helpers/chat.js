@@ -77,7 +77,7 @@ class ChatHelper extends Helper {
    */
   async create(member, members, options = null, hash = null) {
     // set ids
-    const ids = (members.map(m => m.get('_id').toString()).sort()).reduce((accum, id) => {
+    const ids = (members.map(m => (m.id || m.get('_id').toString())).sort()).reduce((accum, id) => {
       // check id in array
       if (!accum.includes(id)) accum.push(id);
 
@@ -90,11 +90,11 @@ class ChatHelper extends Helper {
 
     // load chat
     const chat = await Chat.where({
-      hash : hash !== null ? hash : members.map(m => m.get('_id').toString()).sort().join(':'),
+      hash : hash !== null ? hash : members.map(m => (m.id || m.get('_id').toString())).sort().join(':'),
     }).findOne() || new Chat({
       type    : 'public', // as default
       uuid    : uuid(),
-      hash    : hash !== null ? hash : members.map(m => m.get('_id').toString()).sort().join(':'),
+      hash    : hash !== null ? hash : members.map(m => (m.id || m.get('_id').toString())).sort().join(':'),
       creator : member,
     });
 
@@ -118,11 +118,11 @@ class ChatHelper extends Helper {
     });
 
     // loop users
-    await Promise.all(members.map(async (m) => {
+    members.forEach(async (m) => {
       // user stuff
       const cUser = await CUser.findOne({
         'chat.id'   : chat.get('_id').toString(),
-        'member.id' : m.get('_id').toString(),
+        'member.id' : (m.id || m.get('_id').toString()),
       }) || new CUser({
         chat,
 
@@ -131,7 +131,7 @@ class ChatHelper extends Helper {
 
       // save cuser
       await cUser.save();
-    }));
+    });
 
     // hooks
     if (!chat.get('_id')) return null;
@@ -316,6 +316,7 @@ class ChatHelper extends Helper {
       buttons   : data.buttons || [],
       react     : data.react || {},
       fields    : data.fields || [],
+      image     : data.image || null,
       thumbnail : data.thumbnail || null,
       url       : data.url || null,
       title     : data.title || null,
@@ -336,7 +337,7 @@ class ChatHelper extends Helper {
         try {
           // await
           return await File.findById(embed) || await Image.findById(embed);
-        } catch (e) { console.log(e); }
+        } catch (err) { global.printError(err); }
 
         // return null
         return null;
@@ -459,12 +460,12 @@ class ChatHelper extends Helper {
    */
   async messageReact(member, message, react) {
     // check reaction
-    if (message.get(`react.${react}.${member.get('_id').toString()}`)) {
+    if (message.get(`react.${react}.${member.id || member.get('_id').toString()}`)) {
       // unset reaction
-      message.unset(`react.${react}.${member.get('_id').toString()}`);
+      message.unset(`react.${react}.${member.id || member.get('_id').toString()}`);
     } else {
       // set reaction
-      message.set(`react.${react}.${member.get('_id').toString()}`, new Date());
+      message.set(`react.${react}.${member.id || member.get('_id').toString()}`, new Date());
     }
 
     const data = {};
@@ -478,7 +479,7 @@ class ChatHelper extends Helper {
 
     // emit to socket
     socket.room(`chat.${message.get('chat.id').toString()}`, `chat.${message.get('chat.id').toString()}.react`, {
-      [`react.${react}.${member.get('_id').toString()}`] : message.get(`react.${react}.${member.get('_id').toString()}`),
+      [`react.${react}.${member.id || member.get('_id').toString()}`] : message.get(`react.${react}.${member.id || member.get('_id').toString()}`),
     });
   }
 
@@ -495,7 +496,7 @@ class ChatHelper extends Helper {
     const evtData = {
       button,
       message : await message.sanitise(true),
-      member  : member.get('_id'),
+      member  : member.id || member.get('_id'),
     };
 
     this.eden.emit('eden.chat.message.buttonPress', evtData, true);
