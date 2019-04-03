@@ -331,6 +331,24 @@
       // scroll to bottom
       this.refs.messages.scrollTop = this.refs.messages.scrollHeight;
     }
+
+    /**
+     * on toggle open
+     *
+     * @param  {Event} e
+     *
+     * @return {*}
+     */
+    async onRemoveMessage(id) {
+      // check found
+      this.messages = this.messages.filter(m => m.uuid === id);
+      
+      // update view
+      this.update();
+      
+      // scroll to bottom
+      this.refs.messages.scrollTop = this.refs.messages.scrollHeight;
+    }
     
     /**
      * on typing
@@ -601,6 +619,7 @@
       
       // on created
       socket.off(`chat.${this.chat.get('id')}.typing`, this.onTyping);
+      socket.off(`chat.${this.chat.get('id')}.remove`, this.onRemoveMessage);
       socket.off(`chat.${this.chat.get('id')}.message`, this.onMessage);
     });
     

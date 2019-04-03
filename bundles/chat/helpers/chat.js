@@ -39,9 +39,10 @@ class ChatHelper extends Helper {
 
     // send message
     this.message = {
-      send        : this.messageSend.bind(this),
       set         : this.messageSet.bind(this),
+      send        : this.messageSend.bind(this),
       react       : this.messageReact.bind(this),
+      remove      : this.messageRemove.bind(this),
       buttonPress : this.messageButtonPress.bind(this),
     };
   }
@@ -75,7 +76,7 @@ class ChatHelper extends Helper {
    *
    * @return {*}
    */
-  async create(member, members, options = null, hash = null) {
+  async create(member, members, opts = {}, hash = null) {
     // set ids
     const ids = (members.map(m => (m.id || m.get('_id').toString())).sort()).reduce((accum, id) => {
       // check id in array
@@ -90,11 +91,11 @@ class ChatHelper extends Helper {
 
     // load chat
     const chat = await Chat.where({
-      hash : hash !== null ? hash : members.map(m => (m.id || m.get('_id').toString())).sort().join(':'),
+      hash : hash || members.map(m => (m.id || m.get('_id').toString())).sort().join(':'),
     }).findOne() || new Chat({
       type    : 'public', // as default
       uuid    : uuid(),
-      hash    : hash !== null ? hash : members.map(m => (m.id || m.get('_id').toString())).sort().join(':'),
+      hash    : hash || members.map(m => (m.id || m.get('_id').toString())).sort().join(':'),
       creator : member,
     });
 
@@ -102,8 +103,9 @@ class ChatHelper extends Helper {
     chat.set('members', members);
 
     // update chat with all provided options
-    if (options !== null) {
-      chat.set(options);
+    if (opts) {
+      // set options
+      chat.set(opts);
     }
 
     // set data
@@ -140,7 +142,7 @@ class ChatHelper extends Helper {
     this.eden.emit('eden.chat.create', await chat.sanitise(), true);
 
     // emit
-    socket.user(member, 'chat.create', await chat.sanitise(member));
+    if (member) socket.user(member, 'chat.create', await chat.sanitise(member));
 
     // return cuser
     return chat;
@@ -312,19 +314,19 @@ class ChatHelper extends Helper {
     const message = new Message({
       chat,
 
-      from      : member,
-      buttons   : data.buttons || [],
-      react     : data.react || {},
-      fields    : data.fields || [],
-      image     : data.image || null,
-      thumbnail : data.thumbnail || null,
       url       : data.url || null,
-      title     : data.title || null,
-      color     : data.color || null,
+      raw       : data.message,
       uuid      : data.uuid,
       meta      : data.meta || {},
+      from      : member,
+      color     : data.color || null,
+      react     : data.react || {},
+      title     : data.title || null,
+      image     : data.image || null,
+      fields    : data.fields || [],
+      buttons   : data.buttons || [],
       message   : autolinker.link(toText.fromString(data.message)),
-      raw       : data.message,
+      thumbnail : data.thumbnail || null,
     });
 
     // check embeds
@@ -379,7 +381,7 @@ class ChatHelper extends Helper {
       let emitOpen = false;
 
       // create chat
-      if (!cUser.get('opened')) {
+      if (!cUser.get('opened') && !data.preventOpen) {
         // emit
         emitOpen = true;
 
@@ -468,8 +470,10 @@ class ChatHelper extends Helper {
       message.set(`react.${react}.${member.id || member.get('_id').toString()}`, new Date());
     }
 
+    // set data
     const data = {};
 
+    // do hook
     await this.eden.hook('eden.chat.message.react', {
       data, react, message, member,
     }, async () => {
@@ -481,6 +485,34 @@ class ChatHelper extends Helper {
     socket.room(`chat.${message.get('chat.id').toString()}`, `chat.${message.get('chat.id').toString()}.react`, {
       [`react.${react}.${member.id || member.get('_id').toString()}`] : message.get(`react.${react}.${member.id || member.get('_id').toString()}`),
     });
+  }
+
+  /**
+   * message react action
+   *
+   * @param  {Chat} message
+   *
+   * @return {Promise}
+   */
+  async messageRemove(message) {
+    // set data
+    const data = {};
+
+    // hook
+    await this.eden.hook('eden.chat.message.remove', {
+      data, message,
+    }, async () => {
+      // save message
+      if (!data.prevent) await message.save();
+    });
+
+    // emit to socket
+    socket.room(`chat.${message.get('chat.id').toString()}`, `chat.${message.get('chat.id').toString()}.remove`, {
+      'message.remove' : message.get('uuid'),
+    });
+
+    // remove message
+    await message.remove();
   }
 
   /**
