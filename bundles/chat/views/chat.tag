@@ -94,6 +94,9 @@
       await socket.call('chat.member.set', chat.get('id'), 'style', null);
       await socket.call('chat.member.set', chat.get('id'), 'opened', false);
       await socket.call('chat.member.set', chat.get('id'), 'minimised', false);
+      
+      // update
+      this.update();
     }
     
     /**
@@ -232,7 +235,7 @@
       // filter chat
       return this.chats.filter((chat) => {
         // check style
-        return chat.get('opened') && free && chat.get('style') || !free && !chat.get('style');
+        return chat.get('opened') && ((free && chat.get('style')) || (!free && !chat.get('style')));
       });
     }
     

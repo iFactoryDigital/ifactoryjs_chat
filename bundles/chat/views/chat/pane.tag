@@ -3,7 +3,7 @@
     <div class="card-header">
       <div class="row row-eq-height">
         <div class="col-7 d-flex align-items-center">
-          <div class="w-100 text-overflow">
+          <div class="w-100 text-overflow" onclick={ onToggleOpen }>
             <span class="badge badge-success" if={ this.chat.get('unread') }>
               { this.chat.get('unread') }
             </span>
@@ -14,9 +14,6 @@
           <div class="btn-group btn-group-sm float-right">
             <button class="btn btn-secondary" if={ this.chat.get('style') } onclick={ onReturn }>
               <i class="fa fa-undo" />
-            </button>
-            <button class="btn btn-secondary" onclick={ onToggleOpen }>
-              <i class="fa fa-{ this.chat.get('minimised') ? 'plus' : 'minus' }" />
             </button>
             <button class="btn btn-danger" onclick={ onClose }>
               <i class="fa fa-times" />

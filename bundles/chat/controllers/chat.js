@@ -4,9 +4,8 @@ const Controller  = require('controller');
 const escapeRegex = require('escape-string-regexp');
 
 // Require models
-const Chat  = model('chat');
-const User  = model('user');
-const CUser = model('chatUser');
+const Chat = model('chat');
+const User = model('user');
 
 // require helpers
 const chatHelper = helper('chat');
