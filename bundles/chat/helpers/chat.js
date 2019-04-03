@@ -1,6 +1,7 @@
 
 // import dependencies
 const uuid        = require('uuid');
+const icons       = require('font-awesome-filetypes');
 const socket      = require('socket');
 const Helper      = require('helper');
 const toText      = require('html-to-text');
@@ -322,12 +323,14 @@ class ChatHelper extends Helper {
       message : autolinker.link(toText.fromString(data.message)),
       embeds  : (data.embed || data.embeds) || [{
         url       : data.url || null,
+        tag       : data.tag || 'rich',
+        type      : data.type || 'rich',
         color     : data.color || null,
         title     : data.title || null,
         image     : data.image || null,
         fields    : data.fields || [],
         buttons   : data.buttons || [],
-        primary   : data.primary || false,
+        primary   : data.embed && typeof data.primary === 'undefined' ? true : (data.primary || false),
         thumbnail : data.thumbnail || null,
       }],
     });
@@ -344,7 +347,18 @@ class ChatHelper extends Helper {
           // try/catch
           try {
             // await
-            return await File.findById(embed) || await Image.findById(embed);
+            const image = await File.findById(embed) || await Image.findById(embed);
+
+            // set embed
+            if (image) {
+              // return image
+              return {
+                tag  : image.constructor.name.toLowerCase(),
+                icon : icons.getClassNameForExtension(image.get('name').split('.').pop()),
+                type : image.constructor.name.toLowerCase(),
+                data : await image.sanitise(),
+              };
+            }
           } catch (err) { global.printError(err); }
         }
 
