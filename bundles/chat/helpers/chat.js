@@ -320,13 +320,14 @@ class ChatHelper extends Helper {
       react   : data.react || {},
       uuid    : data.uuid || uuid(),
       message : autolinker.link(toText.fromString(data.message)),
-      embeds  : data.embeds || [{
+      embeds  : (data.embed || data.embeds) || [{
         url       : data.url || null,
         color     : data.color || null,
         title     : data.title || null,
         image     : data.image || null,
         fields    : data.fields || [],
         buttons   : data.buttons || [],
+        primary   : data.primary || false,
         thumbnail : data.thumbnail || null,
       }],
     });
@@ -338,13 +339,17 @@ class ChatHelper extends Helper {
 
       // loop embeds
       const embeds = (await Promise.all(data.embeds.map(async (embed) => {
-        try {
-          // await
-          return await File.findById(embed) || await Image.findById(embed);
-        } catch (err) { global.printError(err); }
+        // get embeds
+        if (typeof embed === 'string') {
+          // try/catch
+          try {
+            // await
+            return await File.findById(embed) || await Image.findById(embed);
+          } catch (err) { global.printError(err); }
+        }
 
         // return null
-        return null;
+        return embed;
       }))).filter(e => e);
 
       // set embeds
