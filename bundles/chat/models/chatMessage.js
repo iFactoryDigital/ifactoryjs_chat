@@ -10,9 +10,9 @@ class ChatMessage extends Model {
   /**
    * construct chat model
    */
-  constructor() {
+  constructor(...args) {
     // run super
-    super(...arguments);
+    super(...args);
 
     // bind methods
     this.sanitise = this.sanitise.bind(this);
@@ -23,11 +23,12 @@ class ChatMessage extends Model {
    *
    * @return {*}
    */
-  async sanitise() {
+  async sanitise(sensitive = false, type) {
     // return object
     const sanitised = {
       id     : this.get('_id') ? this.get('_id').toString() : null,
       from   : this.get('from.id'),
+      chat   : this.get('chat.id'),
       uuid   : this.get('uuid'),
       embeds : await Promise.all((await this.get('embeds') || []).map(async (embed) => {
         // sanitise embed
@@ -44,6 +45,10 @@ class ChatMessage extends Model {
       created_at : this.get('created_at'),
       updated_at : this.get('updated_at'),
     };
+
+    if (sensitive) {
+      sanitised.raw = this.get('raw');
+    }
 
     // await hook
     await this.eden.hook('chatmessage.sanitise', {

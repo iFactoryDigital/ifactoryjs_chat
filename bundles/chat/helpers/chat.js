@@ -39,7 +39,10 @@ class ChatHelper extends Helper {
 
     // send message
     this.message = {
-      send : this.messageSend.bind(this),
+      send        : this.messageSend.bind(this),
+      set         : this.messageSet.bind(this),
+      react       : this.messageReact.bind(this),
+      buttonPress : this.messageButtonPress.bind(this),
     };
   }
 
@@ -72,9 +75,9 @@ class ChatHelper extends Helper {
    *
    * @return {*}
    */
-  async create(member, members) {
+  async create(member, members, options = null, hash = null) {
     // set ids
-    const ids = (members.map(m => m.get('_id').toString()).sort()).reduce((accum, id) => {
+    const ids = (members.map(m => (m.id || m.get('_id').toString())).sort()).reduce((accum, id) => {
       // check id in array
       if (!accum.includes(id)) accum.push(id);
 
@@ -83,18 +86,25 @@ class ChatHelper extends Helper {
     }, []);
 
     // no chats with one user
-    if (ids.length === 1) return;
+    if (ids.length === 1) return null;
 
     // load chat
     const chat = await Chat.where({
-      hash : members.map(m => m.get('_id').toString()).sort().join(':'),
+      hash : hash !== null ? hash : members.map(m => (m.id || m.get('_id').toString())).sort().join(':'),
     }).findOne() || new Chat({
-      members,
-
+      type    : 'public', // as default
       uuid    : uuid(),
-      hash    : members.map(m => m.get('_id').toString()).sort().join(':'),
+      hash    : hash !== null ? hash : members.map(m => (m.id || m.get('_id').toString())).sort().join(':'),
       creator : member,
     });
+
+    // update chat members
+    chat.set('members', members);
+
+    // update chat with all provided options
+    if (options !== null) {
+      chat.set(options);
+    }
 
     // set data
     const data = {};
@@ -108,11 +118,11 @@ class ChatHelper extends Helper {
     });
 
     // loop users
-    await Promise.all(members.map(async (m) => {
+    members.forEach(async (m) => {
       // user stuff
       const cUser = await CUser.findOne({
         'chat.id'   : chat.get('_id').toString(),
-        'member.id' : m.get('_id').toString(),
+        'member.id' : (m.id || m.get('_id').toString()),
       }) || new CUser({
         chat,
 
@@ -121,7 +131,7 @@ class ChatHelper extends Helper {
 
       // save cuser
       await cUser.save();
-    }));
+    });
 
     // hooks
     if (!chat.get('_id')) return null;
@@ -302,9 +312,19 @@ class ChatHelper extends Helper {
     const message = new Message({
       chat,
 
-      from    : member,
-      uuid    : data.uuid,
-      message : autolinker.link(toText.fromString(data.message)),
+      from      : member,
+      buttons   : data.buttons || [],
+      react     : data.react || {},
+      fields    : data.fields || [],
+      image     : data.image || null,
+      thumbnail : data.thumbnail || null,
+      url       : data.url || null,
+      title     : data.title || null,
+      color     : data.color || null,
+      uuid      : data.uuid,
+      meta      : data.meta || {},
+      message   : autolinker.link(toText.fromString(data.message)),
+      raw       : data.message,
     });
 
     // check embeds
@@ -317,7 +337,7 @@ class ChatHelper extends Helper {
         try {
           // await
           return await File.findById(embed) || await Image.findById(embed);
-        } catch (e) { console.log(e) }
+        } catch (err) { global.printError(err); }
 
         // return null
         return null;
@@ -377,14 +397,11 @@ class ChatHelper extends Helper {
     // save chat
     await chat.save();
 
-    // sanitise message
-    const sanitised = await message.sanitise();
-
     // emit
-    this.eden.emit('eden.chat.message', sanitised, true);
+    this.eden.emit('eden.chat.message', await message.sanitise(true), true);
 
     // emit to socket
-    socket.room(`chat.${chat.get('_id').toString()}`, `chat.${chat.get('_id').toString()}.message`, sanitised);
+    socket.room(`chat.${chat.get('_id').toString()}`, `chat.${chat.get('_id').toString()}.message`, await message.sanitise());
 
     // loop users
     members.forEach(async (m) => {
@@ -402,6 +419,88 @@ class ChatHelper extends Helper {
 
     // return message
     return message;
+  }
+
+  /**
+   * message set action
+   *
+   * @param  {Chat}   message
+   * @param  {String} key
+   * @param  {*} value
+   *
+   * @return {Promise}
+   */
+  async messageSet(message, key, value) {
+    // set value
+    message.set(key, value);
+
+    const data = {};
+
+    await this.eden.hook('eden.chat.message.set', {
+      data, key, value, message,
+    }, async () => {
+      // save message
+      if (!data.prevent) await message.save();
+    });
+
+    // emit to socket
+    socket.room(`chat.${message.get('chat.id').toString()}`, `model.update.message.${message.get('_id').toString()}`, {
+      [key] : message.get(key),
+    });
+  }
+
+  /**
+   * message react action
+   *
+   * @param  {*}      member
+   * @param  {Chat}   message
+   * @param  {String} react
+   *
+   * @return {Promise}
+   */
+  async messageReact(member, message, react) {
+    // check reaction
+    if (message.get(`react.${react}.${member.id || member.get('_id').toString()}`)) {
+      // unset reaction
+      message.unset(`react.${react}.${member.id || member.get('_id').toString()}`);
+    } else {
+      // set reaction
+      message.set(`react.${react}.${member.id || member.get('_id').toString()}`, new Date());
+    }
+
+    const data = {};
+
+    await this.eden.hook('eden.chat.message.react', {
+      data, react, message, member,
+    }, async () => {
+      // save message
+      if (!data.prevent) await message.save();
+    });
+
+    // emit to socket
+    socket.room(`chat.${message.get('chat.id').toString()}`, `chat.${message.get('chat.id').toString()}.react`, {
+      [`react.${react}.${member.id || member.get('_id').toString()}`] : message.get(`react.${react}.${member.id || member.get('_id').toString()}`),
+    });
+  }
+
+  /**
+   * message button press action
+   *
+   * @param  {*}      member
+   * @param  {Chat}   message
+   * @param  {String} button
+   *
+   * @return {Promise}
+   */
+  async messageButtonPress(member, message, button) {
+    const evtData = {
+      button,
+      message : await message.sanitise(true),
+      member  : member.id || member.get('_id'),
+    };
+
+    this.eden.emit('eden.chat.message.buttonPress', evtData, true);
+    this.eden.emit(`eden.chat.message.buttonPress.${message.get('_id')}`, evtData, true);
   }
 }
 

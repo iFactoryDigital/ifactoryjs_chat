@@ -13,9 +13,9 @@ class Chat extends Model {
   /**
    * construct chat model
    */
-  constructor() {
+  constructor(...args) {
     // run super
-    super(...arguments);
+    super(...args);
 
     // bind methods
     this.sanitise = this.sanitise.bind(this);
