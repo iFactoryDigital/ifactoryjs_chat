@@ -314,19 +314,21 @@ class ChatHelper extends Helper {
     const message = new Message({
       chat,
 
-      url       : data.url || null,
-      raw       : data.message,
-      uuid      : data.uuid,
-      meta      : data.meta || {},
-      from      : member,
-      color     : data.color || null,
-      react     : data.react || {},
-      title     : data.title || null,
-      image     : data.image || null,
-      fields    : data.fields || [],
-      buttons   : data.buttons || [],
-      message   : autolinker.link(toText.fromString(data.message)),
-      thumbnail : data.thumbnail || null,
+      raw     : data.message,
+      from    : member,
+      meta    : data.meta || {},
+      react   : data.react || {},
+      uuid    : data.uuid || uuid(),
+      message : autolinker.link(toText.fromString(data.message)),
+      embeds  : data.embeds || [{
+        url       : data.url || null,
+        color     : data.color || null,
+        title     : data.title || null,
+        image     : data.image || null,
+        fields    : data.fields || [],
+        buttons   : data.buttons || [],
+        thumbnail : data.thumbnail || null,
+      }],
     });
 
     // check embeds
