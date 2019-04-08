@@ -29,7 +29,7 @@ class ChatMessage extends Model {
       from   : this.get('from.id'),
       chat   : this.get('chat.id'),
       uuid   : this.get('uuid'),
-      embeds : (this.get('embeds') || []).map((embed) => {
+      embeds : (await this.get('embeds') || []).map((embed) => {
         // make rich embed
         if (!embed.type) {
           // set values

@@ -8,12 +8,12 @@
   </div>
 
   <div ref="embeds" if={ (message.embeds || []).length } class="mb-2 chat-embeds { message.from !== this.user.get('id') ? 'text-right' : '' }">
-    <a each={ embed, i in message.embeds } class="embed text-body" style="{ embed.type === 'image' ? 'background-image:url(' + (embed.id ? this.media.url(embed, '2x') : embed.thumb) + ');' : '' }" title={ embed.name } target={ embed.id ? '_blank' : null } href={ embed.id ? this.media.url(embed) : '#' }>
-      <i class="fa { embed.icon }" />
+    <a each={ embed, i in message.embeds } class="embed text-body" style="{ embed.type === 'image' ? 'background-image:url(' + (embed.data ? this.media.url(embed.data, '2x') : embed.thumb) + ');' : '' }" title={ embed.name } target={ embed.id ? '_blank' : null } href={ embed.data ? this.media.url(embed.data) : '#' }>
+      <i class="fa { embed.data ? embed.data.icon : embed.icon }" />
       <span class="embed-name">
-        { embed.name }
+        { embed.data ? embed.data.name : embed.name }
       </span>
-      <div class="progress" if={ !embed.id }>
+      <div class="progress" if={ !embed.data }>
         <div class="progress-bar" role="progressbar" aria-valuenow={ embed.progress } aria-valuemin="0" aria-valuemax="100" style="width: { embed.progress }%;"></div>
       </div>
     </a>
