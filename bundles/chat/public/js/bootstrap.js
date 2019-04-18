@@ -39,4 +39,4 @@ class ChatStore {
  *
  * @type {ChatStore}
  */
-exports = module.exports = window.eden.chat = new ChatStore();
+module.exports = window.eden.chat = new ChatStore();
