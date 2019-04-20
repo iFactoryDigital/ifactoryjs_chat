@@ -48,27 +48,6 @@ class ChatHelper extends Helper {
     };
   }
 
-  _addCUsers(chat, members) {
-    // loop users
-    members.forEach(async (m) => {
-      // user stuff
-      const cUserExists = await CUser.count({
-        'chat.id'   : chat.get('_id').toString(),
-        'member.id' : (m.id || m.get('_id').toString()),
-      }) !== 0;
-
-      if (!cUserExists) {
-        const cUser = new CUser({
-          chat,
-          member : m, // m might be submodel format but thats still ok
-        });
-
-        // save cuser
-        await cUser.save();
-      }
-    });
-  }
-
   // ////////////////////////////////////////////////////////////////////////////
   //
   // CRUD METHODS
@@ -131,7 +110,25 @@ class ChatHelper extends Helper {
     // stop here if a hook stopped a save
     if (!chat.get('_id')) return null;
 
-    this._addCUsers(chat, members);
+    (async () => {
+      for (const m of members) {
+        // user stuff
+        const cUserExists = await CUser.count({
+          'chat.id'   : chat.get('_id').toString(),
+          'member.id' : (m.id || m.get('_id').toString()),
+        }) !== 0;
+
+        if (!cUserExists) {
+          const cUser = new CUser({
+            chat,
+            member : m, // m might be submodel format but thats still ok
+          });
+
+          // save cuser
+          await cUser.save();
+        }
+      }
+    })();
 
     // emit
     this.eden.emit('eden.chat.create', await chat.sanitise(), true);
@@ -382,44 +379,46 @@ class ChatHelper extends Helper {
     // emit to socket
     socket.room(`chat.${chat.get('_id').toString()}`, `chat.${chat.get('_id').toString()}.message`, await message.sanitise());
 
-    members.forEach(async (m) => {
-      // get chat user
-      const cUser = await CUser.findOne({
-        'chat.id'   : chat.get('_id').toString(),
-        'member.id' : m.get('_id').toString(),
-      }) || new CUser({
-        chat,
-        member : m,
-      });
+    (async () => {
+      for (const m of members) {
+        // get chat user
+        const cUser = await CUser.findOne({
+          'chat.id'   : chat.get('_id').toString(),
+          'member.id' : m.get('_id').toString(),
+        }) || new CUser({
+          chat,
+          member : m,
+        });
 
-      // set value
-      cUser.set('unread', await Message.where({ 'chat.id' : chat.get('_id').toString() })
-        .ne('from.id', m.get('_id').toString())
-        .gte('created_at', new Date(cUser.get('read') || 0))
-        .count());
+        // set value
+        cUser.set('unread', await Message.where({ 'chat.id' : chat.get('_id').toString() })
+          .ne('from.id', m.get('_id').toString())
+          .gte('created_at', new Date(cUser.get('read') || 0))
+          .count());
 
-      // let emitOpen
-      let emitOpen = false;
+        // let emitOpen
+        let emitOpen = false;
 
-      // create chat
-      if (!cUser.get('opened') && !data.preventOpen) {
+        // create chat
+        if (!cUser.get('opened') && !data.preventOpen) {
         // emit
-        emitOpen = true;
+          emitOpen = true;
 
-        // unset cloased
-        cUser.set('opened', new Date());
+          // unset cloased
+          cUser.set('opened', new Date());
+        }
+
+        // save cuser
+        await cUser.save();
+
+        // emit
+        if (emitOpen) socket.user(m, 'chat.create', await chat.sanitise(m));
+
+        socket.user(m, `model.update.chat.${chat.get('_id').toString()}`, {
+          unread : cUser.get('unread') || 0,
+        });
       }
-
-      // save cuser
-      await cUser.save();
-
-      // emit
-      if (emitOpen) socket.user(m, 'chat.create', await chat.sanitise(m));
-
-      socket.user(m, `model.update.chat.${chat.get('_id').toString()}`, {
-        unread : cUser.get('unread') || 0,
-      });
-    });
+    })();
 
     // return message
     return message;
