@@ -48,6 +48,26 @@ class ChatHelper extends Helper {
     };
   }
 
+  _addCUsers(chat, members) {
+    // loop users
+    members.forEach(async (m) => {
+      // user stuff
+      const cUserExists = await CUser.count({
+        'chat.id'   : chat.get('_id').toString(),
+        'member.id' : (m.id || m.get('_id').toString()),
+      }) !== 0;
+
+      if (!cUserExists) {
+        const cUser = new CUser({
+          chat,
+          member : m, // m might be submodel format but thats still ok
+        });
+
+        // save cuser
+        await cUser.save();
+      }
+    });
+  }
 
   // ////////////////////////////////////////////////////////////////////////////
   //
@@ -78,66 +98,40 @@ class ChatHelper extends Helper {
    * @return {*}
    */
   async create(member, members, opts = {}, hash = null) {
-    // set ids
-    const ids = (members.map(m => (m.id || m.get('_id').toString())).sort()).reduce((accum, id) => {
-      // check id in array
-      if (!accum.includes(id)) accum.push(id);
+    // no chats with one or no users
+    if (members.length < 2) return null;
 
-      // return accum
-      return accum;
-    }, []);
-
-    // no chats with one user
-    if (ids.length === 1) return null;
+    if (hash === null) hash = members.map(m => (m.id || m.get('_id').toString())).sort().join(':');
 
     // load chat
-    const chat = await Chat.where({
-      hash : hash || members.map(m => (m.id || m.get('_id').toString())).sort().join(':'),
-    }).findOne() || new Chat({
-      type    : 'public', // as default
+    const chat = await Chat.findOne({ hash }) || new Chat({
+      type    : 'public',
       uuid    : uuid(),
-      hash    : hash || members.map(m => (m.id || m.get('_id').toString())).sort().join(':'),
       creator : member,
+      hash,
     });
 
     // update chat members
     chat.set('members', members);
 
     // update chat with all provided options
-    if (opts) {
-      // set options
-      chat.set(opts);
-    }
+    if (opts) chat.set(opts);
 
     // set data
     const data = {};
 
     // await hook
     await this.eden.hook('eden.chat.create', {
-      ids, chat, data, member,
+      chat, data, member,
     }, async () => {
       // save message
       if (!data.prevent) await chat.save();
     });
 
-    // loop users
-    members.forEach(async (m) => {
-      // user stuff
-      const cUser = await CUser.findOne({
-        'chat.id'   : chat.get('_id').toString(),
-        'member.id' : (m.id || m.get('_id').toString()),
-      }) || new CUser({
-        chat,
-
-        member : m,
-      });
-
-      // save cuser
-      await cUser.save();
-    });
-
-    // hooks
+    // stop here if a hook stopped a save
     if (!chat.get('_id')) return null;
+
+    this._addCUsers(chat, members);
 
     // emit
     this.eden.emit('eden.chat.create', await chat.sanitise(), true);
@@ -145,10 +139,8 @@ class ChatHelper extends Helper {
     // emit
     if (member) socket.user(member, 'chat.create', await chat.sanitise(member));
 
-    // return cuser
     return chat;
   }
-
 
   // ////////////////////////////////////////////////////////////////////////////
   //
@@ -381,22 +373,30 @@ class ChatHelper extends Helper {
     // check id
     if (!message.get('_id')) return null;
 
-    // loop users
-    await Promise.all(members.map(async (m) => {
+    // save chat
+    await chat.save();
+
+    // emit
+    this.eden.emit('eden.chat.message', await message.sanitise(true), true);
+
+    // emit to socket
+    socket.room(`chat.${chat.get('_id').toString()}`, `chat.${chat.get('_id').toString()}.message`, await message.sanitise());
+
+    members.forEach(async (m) => {
       // get chat user
       const cUser = await CUser.findOne({
         'chat.id'   : chat.get('_id').toString(),
         'member.id' : m.get('_id').toString(),
       }) || new CUser({
         chat,
-
         member : m,
       });
 
       // set value
-      cUser.set('unread', await Message.where({
-        'chat.id' : chat.get('_id').toString(),
-      }).ne('from.id', m.get('_id').toString()).gte('created_at', new Date(cUser.get('read') || 0)).count());
+      cUser.set('unread', await Message.where({ 'chat.id' : chat.get('_id').toString() })
+        .ne('from.id', m.get('_id').toString())
+        .gte('created_at', new Date(cUser.get('read') || 0))
+        .count());
 
       // let emitOpen
       let emitOpen = false;
@@ -415,26 +415,7 @@ class ChatHelper extends Helper {
 
       // emit
       if (emitOpen) socket.user(m, 'chat.create', await chat.sanitise(m));
-    }));
 
-    // save chat
-    await chat.save();
-
-    // emit
-    this.eden.emit('eden.chat.message', await message.sanitise(true), true);
-
-    // emit to socket
-    socket.room(`chat.${chat.get('_id').toString()}`, `chat.${chat.get('_id').toString()}.message`, await message.sanitise());
-
-    // loop users
-    members.forEach(async (m) => {
-      // get chat user
-      const cUser = await CUser.findOne({
-        'chat.id'   : chat.get('_id').toString(),
-        'member.id' : m.get('_id').toString(),
-      }) || new CUser();
-
-      // emit to socket
       socket.user(m, `model.update.chat.${chat.get('_id').toString()}`, {
         unread : cUser.get('unread') || 0,
       });
