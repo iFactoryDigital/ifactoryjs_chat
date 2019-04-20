@@ -1,7 +1,7 @@
 {
   "name": "@edenjs/chat",
   "description": "nothing yet",
-  "version": "1.0.19",
+  "version": "1.0.20",
   "dependencies": {
     "autolinker": "^3.0.5",
     "font-awesome-filetypes": "^2.0.1",
