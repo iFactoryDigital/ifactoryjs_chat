@@ -110,25 +110,34 @@ class ChatHelper extends Helper {
     // stop here if a hook stopped a save
     if (!chat.get('_id')) return null;
 
-    (async () => {
-      for (const m of members) {
-        // user stuff
-        const cUserExists = await CUser.count({
-          'chat.id'   : chat.get('_id').toString(),
-          'member.id' : (m.id || m.get('_id').toString()),
-        }) !== 0;
+    const cUsersExistKey = `chat.cusersexist.${chat.get('_id')}:${members.map(m => m.id || m.get('_id')).join('-')}`;
 
-        if (!cUserExists) {
-          const cUser = new CUser({
-            chat,
-            member : m, // m might be submodel format but thats still ok
-          });
+    if (!await this.eden.get(cUsersExistKey)) {
+      (async () => {
+        for (const m of members) {
+          const cUserExistsKey = `chat.cuserexists.${chat.get('_id')}:${m.id || m.get('_id')}`;
 
-          // save cuser
-          await cUser.save();
+          const cUserExists = await this.eden.get(cUserExistsKey) || (await CUser.count({
+            'chat.id'   : chat.get('_id'),
+            'member.id' : m.id || m.get('_id'),
+          }) !== 0);
+
+          if (!cUserExists) {
+            const cUser = new CUser({
+              chat,
+              member : m, // m might be submodel format but thats still ok
+            });
+
+            // save cuser
+            await cUser.save();
+          }
+
+          await this.eden.set(cUserExistsKey, true);
         }
-      }
-    })();
+
+        await this.eden.set(cUsersExistKey, true);
+      })();
+    }
 
     // emit
     this.eden.emit('eden.chat.create', await chat.sanitise(), true);
@@ -297,8 +306,8 @@ class ChatHelper extends Helper {
    * @return {Promise}
    */
   async messageSend(member, chat, data) {
-    // get chat users
-    const members = await chat.get('members') || [];
+    // // get chat users
+    // const members = await chat.get('members') || [];
 
     // create message
     const message = new Message({
@@ -379,46 +388,38 @@ class ChatHelper extends Helper {
     // emit to socket
     socket.room(`chat.${chat.get('_id').toString()}`, `chat.${chat.get('_id').toString()}.message`, await message.sanitise());
 
-    (async () => {
-      for (const m of members) {
-        // get chat user
-        const cUser = await CUser.findOne({
-          'chat.id'   : chat.get('_id').toString(),
-          'member.id' : m.get('_id').toString(),
-        }) || new CUser({
-          chat,
-          member : m,
-        });
+    // // This must all be rewritten
 
-        // set value
-        cUser.set('unread', await Message.where({ 'chat.id' : chat.get('_id').toString() })
-          .ne('from.id', m.get('_id').toString())
-          .gte('created_at', new Date(cUser.get('read') || 0))
-          .count());
+    // (async () => {
+    //   for (const m of members) {
+    //     const cUser = await CUser.findOne({
+    //       'chat.id'   : chat.get('_id').toString(),
+    //       'member.id' : m.get('_id').toString(),
+    //     });
 
-        // let emitOpen
-        let emitOpen = false;
+    //     if (cUser === null) continue;
 
-        // create chat
-        if (!cUser.get('opened') && !data.preventOpen) {
-        // emit
-          emitOpen = true;
+    //     cUser.set('unread', await Message.where({ 'chat.id' : chat.get('_id').toString() })
+    //       .ne('from.id', m.get('_id').toString())
+    //       .gte('created_at', new Date(cUser.get('read') || 0))
+    //       .count());
 
-          // unset cloased
-          cUser.set('opened', new Date());
-        }
+    //     let emitOpen = false;
 
-        // save cuser
-        await cUser.save();
+    //     if (!cUser.get('opened') && !data.preventOpen) {
+    //       emitOpen = true;
+    //       cUser.set('opened', new Date());
+    //     }
 
-        // emit
-        if (emitOpen) socket.user(m, 'chat.create', await chat.sanitise(m));
+    //     await cUser.save();
 
-        socket.user(m, `model.update.chat.${chat.get('_id').toString()}`, {
-          unread : cUser.get('unread') || 0,
-        });
-      }
-    })();
+    //     if (emitOpen) socket.user(m, 'chat.create', await chat.sanitise(m));
+
+    //     socket.user(m, `model.update.chat.${chat.get('_id').toString()}`, {
+    //       unread : cUser.get('unread') || 0,
+    //     });
+    //   }
+    // })();
 
     // return message
     return message;
