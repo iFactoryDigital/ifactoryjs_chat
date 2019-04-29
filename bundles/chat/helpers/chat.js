@@ -210,7 +210,7 @@ class ChatHelper extends Helper {
       if (thru === 2) {
         alreadyDone = true;
 
-        for (const [key, value] of updates) {
+        for (const [key, value] of Object.entries(updates)) {
           if (member.get(key) !== value) {
             alreadyDone = false;
             return;
@@ -220,11 +220,7 @@ class ChatHelper extends Helper {
         alreadyDone = (await CUser.where({
           'chat.id'   : chat.id || chat.get('_id'),
           'member.id' : member.id || member.get('_id'),
-
-          ...updates.reduce((acc, [key, value]) => {
-            acc[key] = value;
-            return acc;
-          }, {}),
+          ...updates,
         }).count()) > 0;
       }
 
@@ -251,7 +247,7 @@ class ChatHelper extends Helper {
           }));
         }
 
-        for (const [key, value] of updates) {
+        for (const [key, value] of Object.entries(updates)) {
           if (cUser) cUser.set(key, value);
           if (thru >= 1) superCUsers.forEach(s => s.set(key, value));
           if (thru === 2) member.set(`chat.${key}`, value);
@@ -300,7 +296,7 @@ class ChatHelper extends Helper {
    * @return {Promise}
    */
   async memberSet(member, chat, key, value) {
-    return await this.memberSets(member, chat, [{ [key] : value }], [], false);
+    return await this.memberSets(member, chat, { [key] : value }, [], false);
   }
 
   /**
