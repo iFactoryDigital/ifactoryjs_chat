@@ -113,11 +113,11 @@ class ChatHelper extends Helper {
     // stop here if a hook stopped a save
     if (!chat.get('_id')) return null;
 
-    // emit
     this.eden.emit('eden.chat.create', await chat.sanitise(), true);
 
-    // emit
-    if (member) socket.user(member, 'chat.create', await chat.sanitise(member));
+    // TODO hopefully make socket not need this
+    if (!member.get) member = await User.load(member);
+    socket.user(member, 'chat.create', await chat.sanitise(member));
 
     const membersWithUpdates = [];
     const membersWithoutUpdates = [];
