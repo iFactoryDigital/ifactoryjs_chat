@@ -89,7 +89,7 @@ class ChatHelper extends Helper {
     const chat = await Chat.findOne({ hash }) || new Chat({
       type    : 'public',
       uuid    : uuid(),
-      creator : member,
+      creator : member, // may be a submodel
       hash,
     });
 
@@ -123,7 +123,7 @@ class ChatHelper extends Helper {
     const membersWithoutUpdates = [];
 
     for (const m of members) {
-      if (updates[m.get('_id')] && updates[m.get('_id')].length > 0) {
+      if (updates[m.id || m.get('_id')] && updates[m.id || m.get('_id')].length > 0) {
         membersWithUpdates.push(m);
       } else {
         membersWithoutUpdates.push(m);
@@ -132,7 +132,7 @@ class ChatHelper extends Helper {
 
     (async () => {
       for (const m of membersWithUpdates) {
-        await this.memberSets(m, chat, updates[m.get('_id')], [], supers, thru);
+        await this.memberSets(m, chat, updates[m.id || m.get('_id')], [], supers, thru);
       }
 
       const unlock = await this.eden.lock(`chat.addingcusers.${hash}`);
@@ -144,13 +144,13 @@ class ChatHelper extends Helper {
 
         for (const m of membersWithoutUpdates) {
           const cUserExists = (await CUser.where({
-            'member.id' : m.get('_id'),
+            'member.id' : m.id || m.get('_id'),
             'chat.id'   : chat.get('_id'),
           }).count()) > 0;
 
           if (!cUserExists) {
             const cUser = new CUser({
-              member : m,
+              member : m, // may be a submodel
               chat,
             });
 
@@ -159,13 +159,13 @@ class ChatHelper extends Helper {
 
           if (opts.super) {
             const superCUserExists = (await SuperCUser.where({
-              'member.id' : m.get('_id'),
+              'member.id' : m.id || m.get('_id'),
               hash        : opts.super,
             }).count()) > 0;
 
             if (!superCUserExists) {
               const superCUser = new SuperCUser({
-                member : m,
+                member : m, // submodel maybe
                 hash   : opts.super,
               });
 
