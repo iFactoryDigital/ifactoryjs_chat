@@ -8,11 +8,13 @@ const toText      = require('html-to-text');
 const autolinker  = require('autolinker');
 
 // require models
-const Chat    = model('chat');
-const File    = model('file');
-const Image   = model('image');
-const CUser   = model('chatUser');
-const Message = model('chatMessage');
+const Chat       = model('chat');
+const File       = model('file');
+const Image      = model('image');
+const CUser      = model('chatUser');
+const SuperCUser = model('superChatUser');
+const Message    = model('chatMessage');
+const User       = model('user');
 
 /**
  * extend chat helper
@@ -33,6 +35,7 @@ class ChatHelper extends Helper {
 
     // bind member methods
     this.member = {
+      sets   : this.memberSets.bind(this),
       set    : this.memberSet.bind(this),
       read   : this.memberRead.bind(this),
       typing : this.memberTyping.bind(this),
@@ -153,6 +156,22 @@ class ChatHelper extends Helper {
 
             await cUser.save();
           }
+
+          if (opts.super) {
+            const superCUserExists = (await SuperCUser.where({
+              'member.id' : m.get('_id'),
+              hash        : opts.super,
+            }).count()) > 0;
+
+            if (!superCUserExists) {
+              const superCUser = new SuperCUser({
+                member : m,
+                hash   : opts.super,
+              });
+
+              await superCUser.save();
+            }
+          }
         }
 
         await this.eden.set(`chat.addcusers.${hash}`);
@@ -174,17 +193,23 @@ class ChatHelper extends Helper {
   // ////////////////////////////////////////////////////////////////////////////
 
   /**
-   * member set action
+   * member sets action
    */
-  async memberSets(member, chat, updates, passthrough = false) {
-    const unlock = passthrough ? await member.lock() : null;
+  async memberSets(member, chat, updates, superHash = null, passthrough = 0) {
+    // Make sure member is loaded if passthrough so we can modify
+    if (passthrough === 2 && !member.get) member = await User.load(member);
+
+    const unlock = passthrough === 2 ? await member.lock() : null;
 
     let cUser = null;
+    let superCUser = null;
 
     try {
       let alreadyDone = null;
 
-      if (passthrough) {
+      if (passthrough === 2) {
+        if (!chat.get) chat = await Chat.load(chat);
+
         alreadyDone = true;
 
         for (const [key, value] of updates) {
@@ -195,8 +220,8 @@ class ChatHelper extends Helper {
         }
       } else {
         alreadyDone = (await CUser.where({
-          'member.id' : member.get('_id'),
-          'chat.id'   : chat.get('_id'),
+          'member.id' : member.id || member.get('_id'),
+          'chat.id'   : chat.id || chat.get('_id'),
 
           ...updates.reduce((acc, [key, value]) => {
             acc[key] = value;
@@ -207,26 +232,38 @@ class ChatHelper extends Helper {
 
       if (!alreadyDone) {
         cUser = await CUser.findOne({
-          'chat.id'   : chat.get('_id'),
-          'member.id' : member.get('_id'),
+          'chat.id'   : chat.id || chat.get('_id'),
+          'member.id' : member.id || member.get('_id'),
         }) || new CUser({
-          chat,
-          member,
+          chat, // may be a submodel but ok
+          member, // this too
         });
+
+        if (passthrough >= 1 && superHash) {
+          superCUser = await SuperCUser.findOne({
+            'member.id' : member.id || member.get('_id'),
+            hash        : superHash,
+          }) || new SuperCUser({
+            chat, // may be a submodel but ok
+            hash : superHash,
+          });
+        }
 
         for (const [key, value] of updates) {
           cUser.set(key, value);
-          if (passthrough) member.set(`chat.${key}`, value);
+          if (passthrough >= 1 && superHash) superCUser.set(key, value);
+          if (passthrough === 2) member.set(`chat.${key}`, value);
         }
 
         const data = {};
 
         await this.eden.hook('eden.chat.member.sets', {
-          chat, data, updates, member, cUser,
+          chat, data, updates, member, cUser, superCUser,
         }, async () => {
           if (!data.prevent) {
             await cUser.save();
-            if (passthrough) await member.save();
+            if (passthrough >= 1 && superHash) await superCUser.save();
+            if (passthrough === 2) await member.save();
           }
         });
       }
@@ -235,9 +272,11 @@ class ChatHelper extends Helper {
       throw err;
     }
 
+    unlock();
+
     // can chat id really ever be null?
-    if (cUser && chat.get('_id')) {
-      socket.user(member, `model.update.chat.${chat.get('_id')}`, updates.map(([key]) => {
+    if (cUser && (chat.id || chat.get('_id'))) {
+      socket.user(member, `model.update.chat.${chat.id || chat.get('_id')}`, updates.map(([key]) => {
         return cUser.get(key);
       }).reduce((acc, [key, value]) => {
         acc[key] = value;
@@ -249,6 +288,8 @@ class ChatHelper extends Helper {
   /**
    * member set action
    *
+   * @deprecated
+   *
    * @param  {*}      member
    * @param  {Chat}   chat
    * @param  {String} key
@@ -256,8 +297,8 @@ class ChatHelper extends Helper {
    *
    * @return {Promise}
    */
-  async memberSet(member, chat, key, value, passthrough = false) {
-    return await this.memberSets(member, chat, [{ [key] : value }], passthrough);
+  async memberSet(member, chat, key, value) {
+    return await this.memberSets(member, chat, [{ [key] : value }], null, false);
   }
 
   /**
