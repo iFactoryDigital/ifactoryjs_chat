@@ -174,7 +174,7 @@ class ChatHelper extends Helper {
           }
         }
 
-        await this.eden.set(`chat.addcusers.${hash}`);
+        await this.eden.set(`chat.addcusers.${hash}`, true, 1000 * 60 * 15);
       } catch (err) {
         unlock();
         global.printError(err);
