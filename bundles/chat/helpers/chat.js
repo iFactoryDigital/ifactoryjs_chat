@@ -274,7 +274,7 @@ class ChatHelper extends Helper {
       throw err;
     }
 
-    unlock();
+    if (unlock !== null) unlock();
 
     // can chat id really ever be null?
     if (cUser && chat && (chat.id || chat.get('_id'))) {
