@@ -241,13 +241,13 @@ class ChatHelper extends Helper {
 
         if (thru >= 1) {
           superCUsers = await Promise.all(supers.map(async (superHash) => {
-            return await SuperCUser.findOne({
+            return ((await SuperCUser.findOne({
               'member.id' : member.id || member.get('_id'),
               hash        : superHash,
-            }) || new SuperCUser({
+            })) || new SuperCUser({
               'member.id' : member.id || member.get('_id'),
               hash        : superHash,
-            });
+            }));
           }));
         }
 
