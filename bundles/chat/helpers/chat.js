@@ -218,8 +218,8 @@ class ChatHelper extends Helper {
         }
       } else if (chat !== null) {
         alreadyDone = (await CUser.where({
-          'member.id' : member.id || member.get('_id'),
           'chat.id'   : chat.id || chat.get('_id'),
+          'member.id' : member.id || member.get('_id'),
 
           ...updates.reduce((acc, [key, value]) => {
             acc[key] = value;
@@ -242,11 +242,11 @@ class ChatHelper extends Helper {
         if (thru >= 1) {
           superCUsers = await Promise.all(supers.map(async (superHash) => {
             return ((await SuperCUser.findOne({
-              'member.id' : member.id || member.get('_id'),
               hash        : superHash,
+              'member.id' : member.id || member.get('_id'),
             })) || new SuperCUser({
-              'member.id' : member.id || member.get('_id'),
-              hash        : superHash,
+              hash : superHash,
+              member,
             }));
           }));
         }
