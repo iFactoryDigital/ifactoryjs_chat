@@ -205,20 +205,18 @@ class ChatHelper extends Helper {
     let superCUsers = null;
 
     try {
-      let alreadyDone = null;
+      let alreadyDone = false;
 
       if (thru === 2) {
-        if (!chat.get) chat = await Chat.load(chat);
-
         alreadyDone = true;
 
         for (const [key, value] of updates) {
-          if (chat.get(key) !== value) {
+          if (member.get(key) !== value) {
             alreadyDone = false;
             return;
           }
         }
-      } else {
+      } else if (chat !== null) {
         alreadyDone = (await CUser.where({
           'member.id' : member.id || member.get('_id'),
           'chat.id'   : chat.id || chat.get('_id'),
@@ -231,13 +229,15 @@ class ChatHelper extends Helper {
       }
 
       if (!alreadyDone) {
-        cUser = await CUser.findOne({
-          'chat.id'   : chat.id || chat.get('_id'),
-          'member.id' : member.id || member.get('_id'),
-        }) || new CUser({
-          chat, // may be a submodel but ok
-          member, // this too
-        });
+        if (chat !== null) {
+          cUser = await CUser.findOne({
+            'chat.id'   : chat.id || chat.get('_id'),
+            'member.id' : member.id || member.get('_id'),
+          }) || new CUser({
+            chat, // may be a submodel but ok
+            member, // this too
+          });
+        }
 
         if (thru >= 1) {
           superCUsers = await Promise.all(supers.map(async (superHash) => {
@@ -245,14 +245,14 @@ class ChatHelper extends Helper {
               'member.id' : member.id || member.get('_id'),
               hash        : superHash,
             }) || new SuperCUser({
-              chat, // may be a submodel but ok
-              hash : superHash,
+              'member.id' : member.id || member.get('_id'),
+              hash        : superHash,
             });
           }));
         }
 
         for (const [key, value] of updates) {
-          cUser.set(key, value);
+          if (cUser) cUser.set(key, value);
           if (thru >= 1) superCUsers.forEach(s => s.set(key, value));
           if (thru === 2) member.set(`chat.${key}`, value);
         }
@@ -263,7 +263,7 @@ class ChatHelper extends Helper {
           chat, data, updates, member, cUser, superCUsers,
         }, async () => {
           if (!data.prevent) {
-            await cUser.save();
+            if (cUser) await cUser.save();
             if (thru >= 1) await Promise.all(superCUsers.map(async s => s.save()));
             if (thru === 2) await member.save();
           }
@@ -277,7 +277,7 @@ class ChatHelper extends Helper {
     unlock();
 
     // can chat id really ever be null?
-    if (cUser && (chat.id || chat.get('_id'))) {
+    if (cUser && chat && (chat.id || chat.get('_id'))) {
       socket.user(member, `model.update.chat.${chat.id || chat.get('_id')}`, updates.map(([key]) => {
         return cUser.get(key);
       }).reduce((acc, [key, value]) => {
