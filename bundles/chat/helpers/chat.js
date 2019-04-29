@@ -79,7 +79,7 @@ class ChatHelper extends Helper {
    *
    * @return {*}
    */
-  async create(member, members, opts = {}, hash = null, updates = null, passthrough = false) {
+  async create(member, members, opts = {}, hash = null, updates = null, supers = [], thru = false) {
     // no chats with one or no users
     if (members.length < 2) return null;
 
@@ -132,7 +132,7 @@ class ChatHelper extends Helper {
 
     (async () => {
       for (const m of membersWithUpdates) {
-        await this.memberSets(m, chat, updates[m.get('_id')], passthrough);
+        await this.memberSets(m, chat, updates[m.get('_id')], [], supers, thru);
       }
 
       const unlock = await this.eden.lock(`chat.addingcusers.${hash}`);
@@ -195,19 +195,19 @@ class ChatHelper extends Helper {
   /**
    * member sets action
    */
-  async memberSets(member, chat, updates, superHash = null, passthrough = 0) {
-    // Make sure member is loaded if passthrough so we can modify
-    if (passthrough === 2 && !member.get) member = await User.load(member);
+  async memberSets(member, chat, updates, supers = [], thru = 0) {
+    // Make sure member is loaded if thru so we can modify
+    if (thru === 2 && !member.get) member = await User.load(member);
 
-    const unlock = passthrough === 2 ? await member.lock() : null;
+    const unlock = thru === 2 ? await member.lock() : null;
 
     let cUser = null;
-    let superCUser = null;
+    let superCUsers = null;
 
     try {
       let alreadyDone = null;
 
-      if (passthrough === 2) {
+      if (thru === 2) {
         if (!chat.get) chat = await Chat.load(chat);
 
         alreadyDone = true;
@@ -239,31 +239,33 @@ class ChatHelper extends Helper {
           member, // this too
         });
 
-        if (passthrough >= 1 && superHash) {
-          superCUser = await SuperCUser.findOne({
-            'member.id' : member.id || member.get('_id'),
-            hash        : superHash,
-          }) || new SuperCUser({
-            chat, // may be a submodel but ok
-            hash : superHash,
-          });
+        if (thru >= 1) {
+          superCUsers = await Promise.all(supers.map(async (superHash) => {
+            return await SuperCUser.findOne({
+              'member.id' : member.id || member.get('_id'),
+              hash        : superHash,
+            }) || new SuperCUser({
+              chat, // may be a submodel but ok
+              hash : superHash,
+            });
+          }));
         }
 
         for (const [key, value] of updates) {
           cUser.set(key, value);
-          if (passthrough >= 1 && superHash) superCUser.set(key, value);
-          if (passthrough === 2) member.set(`chat.${key}`, value);
+          if (thru >= 1) superCUsers.forEach(s => s.set(key, value));
+          if (thru === 2) member.set(`chat.${key}`, value);
         }
 
         const data = {};
 
         await this.eden.hook('eden.chat.member.sets', {
-          chat, data, updates, member, cUser, superCUser,
+          chat, data, updates, member, cUser, superCUsers,
         }, async () => {
           if (!data.prevent) {
             await cUser.save();
-            if (passthrough >= 1 && superHash) await superCUser.save();
-            if (passthrough === 2) await member.save();
+            if (thru >= 1) await Promise.all(superCUsers.map(async s => s.save()));
+            if (thru === 2) await member.save();
           }
         });
       }
@@ -298,7 +300,7 @@ class ChatHelper extends Helper {
    * @return {Promise}
    */
   async memberSet(member, chat, key, value) {
-    return await this.memberSets(member, chat, [{ [key] : value }], null, false);
+    return await this.memberSets(member, chat, [{ [key] : value }], [], false);
   }
 
   /**
