@@ -64,7 +64,7 @@ class ChatHelper extends Helper {
   async all(member) {
     // return chats by member
     return (await Promise.all((await CUser.where({
-      'member.id' : member.get('_id').toString(),
+      'member.id' : member.get('_id'),
     }).ne('opened', false).find()).map(cUser => cUser.get('chat')))).filter(chat => chat);
   }
 
@@ -76,11 +76,11 @@ class ChatHelper extends Helper {
    *
    * @return {*}
    */
-  async create(member, members, opts = {}, hash = null) {
+  async create(member, members, opts = {}, hash = null, updates = null, passthrough = false) {
     // no chats with one or no users
     if (members.length < 2) return null;
 
-    if (hash === null) hash = members.map(m => (m.id || m.get('_id').toString())).sort().join(':');
+    if (hash === null) hash = members.map(m => m.id || m.get('_id')).sort().join(':');
 
     // load chat
     const chat = await Chat.findOne({ hash }) || new Chat({
@@ -116,6 +116,54 @@ class ChatHelper extends Helper {
     // emit
     if (member) socket.user(member, 'chat.create', await chat.sanitise(member));
 
+    const membersWithUpdates = [];
+    const membersWithoutUpdates = [];
+
+    for (const m of members) {
+      if (updates[m.get('_id')] && updates[m.get('_id')].length > 0) {
+        membersWithUpdates.push(m);
+      } else {
+        membersWithoutUpdates.push(m);
+      }
+    }
+
+    (async () => {
+      for (const m of membersWithUpdates) {
+        await this.memberSets(m, chat, updates[m.get('_id')], passthrough);
+      }
+
+      const unlock = await this.eden.lock(`chat.addingcusers.${hash}`);
+
+      try {
+        if (await this.eden.get(`chat.addcusers.${hash}`)) {
+          return;
+        }
+
+        for (const m of membersWithoutUpdates) {
+          const cUserExists = (await CUser.where({
+            'member.id' : m.get('_id'),
+            'chat.id'   : chat.get('_id'),
+          }).count()) > 0;
+
+          if (!cUserExists) {
+            const cUser = new CUser({
+              member : m,
+              chat,
+            });
+
+            await cUser.save();
+          }
+        }
+
+        await this.eden.set(`chat.addcusers.${hash}`);
+      } catch (err) {
+        unlock();
+        global.printError(err);
+      }
+
+      unlock();
+    })();
+
     return chat;
   }
 
@@ -127,6 +175,79 @@ class ChatHelper extends Helper {
 
   /**
    * member set action
+   */
+  async memberSets(member, chat, updates, passthrough = false) {
+    const unlock = passthrough ? await member.lock() : null;
+
+    let cUser = null;
+
+    try {
+      let alreadyDone = null;
+
+      if (passthrough) {
+        alreadyDone = true;
+
+        for (const [key, value] of updates) {
+          if (chat.get(key) !== value) {
+            alreadyDone = false;
+            return;
+          }
+        }
+      } else {
+        alreadyDone = (await CUser.where({
+          'member.id' : member.get('_id'),
+          'chat.id'   : chat.get('_id'),
+
+          ...updates.reduce((acc, [key, value]) => {
+            acc[key] = value;
+            return acc;
+          }, {}),
+        }).count()) > 0;
+      }
+
+      if (!alreadyDone) {
+        cUser = await CUser.findOne({
+          'chat.id'   : chat.get('_id'),
+          'member.id' : member.get('_id'),
+        }) || new CUser({
+          chat,
+          member,
+        });
+
+        for (const [key, value] of updates) {
+          cUser.set(key, value);
+          if (passthrough) member.set(`chat.${key}`, value);
+        }
+
+        const data = {};
+
+        await this.eden.hook('eden.chat.member.sets', {
+          chat, data, updates, member, cUser,
+        }, async () => {
+          if (!data.prevent) {
+            await cUser.save();
+            if (passthrough) await member.save();
+          }
+        });
+      }
+    } catch (err) {
+      if (unlock !== null) unlock();
+      throw err;
+    }
+
+    // can chat id really ever be null?
+    if (cUser && chat.get('_id')) {
+      socket.user(member, `model.update.chat.${chat.get('_id')}`, updates.map(([key]) => {
+        return cUser.get(key);
+      }).reduce((acc, [key, value]) => {
+        acc[key] = value;
+        return acc;
+      }, {}));
+    }
+  }
+
+  /**
+   * member set action
    *
    * @param  {*}      member
    * @param  {Chat}   chat
@@ -135,40 +256,8 @@ class ChatHelper extends Helper {
    *
    * @return {Promise}
    */
-  async memberSet(member, chat, key, value) {
-    // user stuff
-    const cUser = await CUser.findOne({
-      'chat.id'   : chat.get('_id').toString(),
-      'member.id' : member.get('_id').toString(),
-    }) || new CUser({
-      chat,
-      member,
-    });
-
-    // set style
-    cUser.set(key, value);
-
-    // set data
-    const data = {};
-
-    // await hook
-    await this.eden.hook('eden.chat.member.set', {
-      chat, data, key, value, member, cUser,
-    }, async () => {
-      // save message
-      if (!data.prevent) await cUser.save();
-    });
-
-    // hooks
-    if (!chat.get('_id')) return null;
-
-    // emit to socket
-    socket.user(member, `model.update.chat.${chat.get('_id').toString()}`, {
-      [key] : cUser.get(key),
-    });
-
-    // return cuser
-    return cUser;
+  async memberSet(member, chat, key, value, passthrough = false) {
+    return await this.memberSets(member, chat, [{ [key] : value }], passthrough);
   }
 
   /**
@@ -183,8 +272,8 @@ class ChatHelper extends Helper {
   async memberRead(member, chat, read) {
     // get chat user
     const cUser = await CUser.findOne({
-      'chat.id'   : chat.get('_id').toString(),
-      'member.id' : member.get('_id').toString(),
+      'chat.id'   : chat.get('_id'),
+      'member.id' : member.get('_id'),
     }) || new CUser({
       chat,
       member,
@@ -193,22 +282,22 @@ class ChatHelper extends Helper {
     // set read
     cUser.set('read', new Date(read));
     cUser.set('unread', await Message.where({
-      'chat.id' : chat.get('_id').toString(),
-    }).ne('from.id', member.get('_id').toString()).gt('created_at', new Date(cUser.get('read') || 0)).count());
+      'chat.id' : chat.get('_id'),
+    }).ne('from.id', member.get('_id')).gt('created_at', new Date(cUser.get('read') || 0)).count());
 
     // save chat
     await cUser.save();
 
     // emit to socket
-    socket.user(member, `model.update.chat.${chat.get('_id').toString()}`, {
+    socket.user(member, `model.update.chat.${chat.get('_id')}`, {
       unread : cUser.get('unread'),
     });
 
     // emit read
     this.eden.emit('eden.chat.member.read', {
-      id     : chat.get('_id').toString(),
+      id     : chat.get('_id'),
       when   : cUser.get('read'),
-      member : member.get('_id').toString(),
+      member : member.get('_id'),
     }, true);
 
     // return cuser
@@ -228,10 +317,10 @@ class ChatHelper extends Helper {
     // set typing
     if (isTyping) {
       // set typing
-      chat.set(`typing.${member.get('_id').toString()}`, new Date());
+      chat.set(`typing.${member.get('_id')}`, new Date());
     } else {
       // unset typing
-      chat.unset(`typing.${member.get('_id').toString()}`);
+      chat.unset(`typing.${member.get('_id')}`);
     }
 
     // save chat
@@ -241,7 +330,7 @@ class ChatHelper extends Helper {
     const sanitised = await chat.sanitise();
 
     // emit to socket
-    socket.room(`chat.${chat.get('_id').toString()}`, `chat.${chat.get('_id').toString()}.typing`, sanitised.typing.map((item) => {
+    socket.room(`chat.${chat.get('_id')}`, `chat.${chat.get('_id')}.typing`, sanitised.typing.map((item) => {
       // return item
       return {
         when   : item.when.getTime() - ((new Date()).getTime() - 5 * 1000),
@@ -251,9 +340,9 @@ class ChatHelper extends Helper {
 
     // emit read
     this.eden.emit('eden.chat.member.typing', {
-      id       : chat.get('_id').toString(),
-      member   : member.get('_id').toString(),
-      isTyping : chat.get(`typing.${member.get('_id').toString()}`),
+      id       : chat.get('_id'),
+      member   : member.get('_id'),
+      isTyping : chat.get(`typing.${member.get('_id')}`),
     }, true);
 
     // return typing
@@ -277,9 +366,6 @@ class ChatHelper extends Helper {
    * @return {Promise}
    */
   async messageSend(member, chat, data) {
-    // // get chat users
-    // const members = await chat.get('members') || [];
-
     // create message
     const message = new Message({
       chat,
@@ -357,7 +443,7 @@ class ChatHelper extends Helper {
     this.eden.emit('eden.chat.message', await message.sanitise(true), true);
 
     // emit to socket
-    socket.room(`chat.${chat.get('_id').toString()}`, `chat.${chat.get('_id').toString()}.message`, await message.sanitise());
+    socket.room(`chat.${chat.get('_id')}`, `chat.${chat.get('_id')}.message`, await message.sanitise());
 
     // return message
     return message;
@@ -386,7 +472,7 @@ class ChatHelper extends Helper {
     });
 
     // emit to socket
-    socket.room(`chat.${message.get('chat.id').toString()}`, `model.update.message.${message.get('_id').toString()}`, {
+    socket.room(`chat.${message.get('chat.id')}`, `model.update.message.${message.get('_id')}`, {
       [key] : message.get(key),
     });
   }
@@ -402,12 +488,12 @@ class ChatHelper extends Helper {
    */
   async messageReact(member, message, react) {
     // check reaction
-    if (message.get(`react.${react}.${member.id || member.get('_id').toString()}`)) {
+    if (message.get(`react.${react}.${member.id || member.get('_id')}`)) {
       // unset reaction
-      message.unset(`react.${react}.${member.id || member.get('_id').toString()}`);
+      message.unset(`react.${react}.${member.id || member.get('_id')}`);
     } else {
       // set reaction
-      message.set(`react.${react}.${member.id || member.get('_id').toString()}`, new Date());
+      message.set(`react.${react}.${member.id || member.get('_id')}`, new Date());
     }
 
     // set data
@@ -422,8 +508,8 @@ class ChatHelper extends Helper {
     });
 
     // emit to socket
-    socket.room(`chat.${message.get('chat.id').toString()}`, `chat.${message.get('chat.id').toString()}.react`, {
-      [`react.${react}.${member.id || member.get('_id').toString()}`] : message.get(`react.${react}.${member.id || member.get('_id').toString()}`),
+    socket.room(`chat.${message.get('chat.id')}`, `chat.${message.get('chat.id')}.react`, {
+      [`react.${react}.${member.id || member.get('_id')}`] : message.get(`react.${react}.${member.id || member.get('_id')}`),
     });
   }
 
@@ -447,7 +533,7 @@ class ChatHelper extends Helper {
     });
 
     // emit to socket
-    socket.room(`chat.${message.get('chat.id').toString()}`, `chat.${message.get('chat.id').toString()}.remove`, {
+    socket.room(`chat.${message.get('chat.id')}`, `chat.${message.get('chat.id')}.remove`, {
       'message.remove' : message.get('uuid'),
     });
 
