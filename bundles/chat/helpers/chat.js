@@ -15,6 +15,7 @@ const CUser      = model('chatUser');
 const SuperCUser = model('superChatUser');
 const Message    = model('chatMessage');
 const User       = model('user');
+const SuperChat  = model('superChat');
 
 /**
  * extend chat helper
@@ -156,22 +157,6 @@ class ChatHelper extends Helper {
 
             await cUser.save();
           }
-
-          if (opts.super) {
-            const superCUserExists = (await SuperCUser.where({
-              'member.id' : m.id || m.get('_id'),
-              hash        : opts.super,
-            }).count()) > 0;
-
-            if (!superCUserExists) {
-              const superCUser = new SuperCUser({
-                member : m, // submodel maybe
-                hash   : opts.super,
-              });
-
-              await superCUser.save();
-            }
-          }
         }
 
         await this.eden.set(`chat.addcusers.${hash}`, true, 1000 * 60 * 15);
@@ -203,6 +188,7 @@ class ChatHelper extends Helper {
 
     let cUser = null;
     let superCUsers = null;
+    let superChats = null;
 
     try {
       let alreadyDone = false;
@@ -236,12 +222,29 @@ class ChatHelper extends Helper {
         }
 
         if (thru >= 1) {
-          superCUsers = await Promise.all(supers.map(async (superHash) => {
+          superChats = [];
+
+          superCUsers = await Promise.all(supers.map(async (superData) => {
+            let superChat = await SuperChat.findOne({
+              hash : superData.hash,
+            });
+
+            if (!superChat) {
+              superChat = new SuperChat({
+                hash : superData.hash,
+                ...superData,
+              });
+
+              await superChat.save();
+            }
+
+            superChats.push(superChat);
+
             return ((await SuperCUser.findOne({
-              hash        : superHash,
               'member.id' : member.id || member.get('_id'),
+              superChat   : superChat.get('_id'),
             })) || new SuperCUser({
-              hash : superHash,
+              superChat,
               member,
             }));
           }));
@@ -256,7 +259,7 @@ class ChatHelper extends Helper {
         const data = {};
 
         await this.eden.hook('eden.chat.member.sets', {
-          chat, data, updates, member, cUser, superCUsers,
+          chat, data, updates, member, cUser, superCUsers, superChats,
         }, async () => {
           if (!data.prevent) {
             if (cUser) await cUser.save();
