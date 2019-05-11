@@ -241,8 +241,8 @@ class ChatHelper extends Helper {
             superChats.push(superChat);
 
             return ((await SuperCUser.findOne({
-              'member.id' : member.id || member.get('_id'),
-              superChat   : superChat.get('_id'),
+              'member.id'    : member.id || member.get('_id'),
+              'superChat.id' : superChat.get('_id'),
             })) || new SuperCUser({
               superChat,
               member,
