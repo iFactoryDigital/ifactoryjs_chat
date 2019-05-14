@@ -204,7 +204,7 @@ class ChatHelper extends Helper {
   /**
    * member sets action
    */
-  async memberSets(member, chat, updates = [], supers = [], level = 0) {
+  async memberSets(member, chat, updates = {}, supers = [], level = 0) {
     // Make sure member is loaded if level so we can modify
     if (level === 2 && !member.get) member = await User.load(member);
 
@@ -324,19 +324,27 @@ class ChatHelper extends Helper {
         });
       }
     } catch (err) {
+      // do unlock
       if (unlock !== null) unlock();
+
+      // throw error
       throw err;
     }
 
+    // do unlock
     if (unlock !== null) unlock();
 
     // can chat id really ever be null?
     if (cUser && chat && (chat.id || chat.get('_id'))) {
       // emit to socket
-      socket.user(member, `model.update.chat.${chat.id || chat.get('_id')}`, updates.map(([key]) => {
-        return cUser.get(key);
+      socket.user(member, `model.update.chat.${chat.id || chat.get('_id')}`, Object.entries(updates).map(([key]) => {
+        // return array map
+        return [key, cUser.get(key)];
       }).reduce((acc, [key, value]) => {
+        // add to object
         acc[key] = value;
+
+        // return accumulator
         return acc;
       }, {}));
     }
