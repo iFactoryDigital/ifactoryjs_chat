@@ -80,7 +80,7 @@ class ChatHelper extends Helper {
    *
    * @return {*}
    */
-  async create(member, members, opts = {}, hash = null, updates = null, supers = [], thru = false) {
+  async create(member, members, opts = {}, hash = null, updates = null, supers = [], thru = 0) {
     // no chats with one or no users
     if (members.length < 2) return null;
 
@@ -124,7 +124,7 @@ class ChatHelper extends Helper {
     const membersWithoutUpdates = [];
 
     for (const m of members) {
-      if (updates[m.id || m.get('_id')] && updates[m.id || m.get('_id')].length > 0) {
+      if (updates && updates[m.id || m.get('_id')] && updates[m.id || m.get('_id')].length > 0) {
         membersWithUpdates.push(m);
       } else {
         membersWithoutUpdates.push(m);
