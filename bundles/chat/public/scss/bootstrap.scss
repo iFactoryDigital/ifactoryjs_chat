@@ -13,7 +13,7 @@ $chat-pane-height : $chat-pane-width * 1.5!default;
   right    : 0;
   bottom   : 0;
   padding  : $chat-pane-spacer;
-  z-index  : 201;
+  z-index  : 2001;
   position : fixed;
 
   .chat-chats {

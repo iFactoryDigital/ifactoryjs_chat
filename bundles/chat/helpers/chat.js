@@ -8,14 +8,14 @@ const toText      = require('html-to-text');
 const autolinker  = require('autolinker');
 
 // require models
+const User       = model('user');
 const Chat       = model('chat');
 const File       = model('file');
 const Image      = model('image');
 const CUser      = model('chatUser');
-const SuperCUser = model('superChatUser');
 const Message    = model('chatMessage');
-const User       = model('user');
 const SuperChat  = model('superChat');
+const SuperCUser = model('superChatUser');
 
 /**
  * extend chat helper
@@ -80,10 +80,11 @@ class ChatHelper extends Helper {
    *
    * @return {*}
    */
-  async create(member, members, opts = {}, hash = null, updates = null, supers = [], thru = 0) {
+  async create(member, members, opts = {}, hash = null, updates = {}, supers = [], level = false) {
     // no chats with one or no users
     if (members.length < 2) return null;
 
+    // create hash
     if (hash === null) hash = members.map(m => m.id || m.get('_id')).sort().join(':');
 
     // load chat
@@ -114,15 +115,20 @@ class ChatHelper extends Helper {
     // stop here if a hook stopped a save
     if (!chat.get('_id')) return null;
 
+    // emit create
     this.eden.emit('eden.chat.create', await chat.sanitise(), true);
 
     // TODO hopefully make socket not need this
     if (!member.get) member = await User.load(member);
+
+    // emit to socket
     socket.user(member, 'chat.create', await chat.sanitise(member));
 
+    // check updates
     const membersWithUpdates = [];
     const membersWithoutUpdates = [];
 
+    // updates
     for (const m of members) {
       if (updates && updates[m.id || m.get('_id')] && updates[m.id || m.get('_id')].length > 0) {
         membersWithUpdates.push(m);
@@ -131,43 +137,61 @@ class ChatHelper extends Helper {
       }
     }
 
-    (async () => {
+    // async function
+    const updateMembers = async () => {
+      // loop members
       for (const m of membersWithUpdates) {
-        await this.memberSets(m, chat, updates[m.id || m.get('_id')], [], supers, thru);
+        // set member
+        await this.memberSets(m, chat, updates[m.id || m.get('_id')], [], supers, level);
       }
 
+      // lock adding cusers
       const unlock = await this.eden.lock(`chat.addingcusers.${hash}`);
 
+      // try/catch
       try {
+        // check adding users
         if (await this.eden.get(`chat.addcusers.${hash}`)) {
-          return;
+          // unlock and return
+          unlock(); return;
         }
 
+        // without updates
         for (const m of membersWithoutUpdates) {
+          // check user exists
           const cUserExists = (await CUser.where({
             'member.id' : m.id || m.get('_id'),
             'chat.id'   : chat.get('_id'),
           }).count()) > 0;
 
-          if (!cUserExists) {
-            const cUser = new CUser({
-              member : m, // may be a submodel
-              chat,
-            });
+          // if user exists, continue
+          if (cUserExists) continue;
 
-            await cUser.save();
-          }
+          // create chat user
+          const cUser = new CUser({
+            member : m, // may be a submodel
+            chat,
+          });
+
+          // save user
+          await cUser.save();
         }
 
+        // set updated time in db
         await this.eden.set(`chat.addcusers.${hash}`, true, 1000 * 60 * 15);
       } catch (err) {
         unlock();
         global.printError(err);
       }
 
+      // unlock
       unlock();
-    })();
+    };
 
+    // updater members in background
+    updateMembers();
+
+    // return chat
     return chat;
   }
 
@@ -180,29 +204,38 @@ class ChatHelper extends Helper {
   /**
    * member sets action
    */
-  async memberSets(member, chat, updates, supers = [], thru = 0) {
-    // Make sure member is loaded if thru so we can modify
-    if (thru === 2 && !member.get) member = await User.load(member);
+  async memberSets(member, chat, updates = {}, supers = [], level = 0) {
+    // Make sure member is loaded if level so we can modify
+    if (level === 2 && !member.get) member = await User.load(member);
 
-    const unlock = thru === 2 ? await member.lock() : null;
+    // lock member
+    const unlock = level === 2 ? await member.lock() : null;
 
+    // set variables
     let cUser = null;
-    let superCUsers = null;
     let superChats = null;
+    let superCUsers = null;
 
+    // try/catch
     try {
+      // check done
       let alreadyDone = false;
 
-      if (thru === 2) {
+      // check level
+      if (level === 2) {
+        // set already done
         alreadyDone = true;
 
+        // set values to update
         for (const [key, value] of Object.entries(updates)) {
-          if (member.get(key) !== value) {
-            alreadyDone = false;
-            return;
-          }
+          // check key matches
+          if (member.get(key) === value) continue;
+
+          // reset done
+          alreadyDone = false; break;
         }
       } else if (chat !== null) {
+        // set already done
         alreadyDone = (await CUser.where({
           'chat.id'   : chat.id || chat.get('_id'),
           'member.id' : member.id || member.get('_id'),
@@ -210,8 +243,11 @@ class ChatHelper extends Helper {
         }).count()) > 0;
       }
 
+      // check already done
       if (!alreadyDone) {
+        // check chat
         if (chat !== null) {
+          // create/find chat user
           cUser = await CUser.findOne({
             'chat.id'   : chat.id || chat.get('_id'),
             'member.id' : member.id || member.get('_id'),
@@ -221,25 +257,34 @@ class ChatHelper extends Helper {
           });
         }
 
-        if (thru >= 1) {
+        // check level greater or 1
+        if (level >= 1) {
+          // super chats
           superChats = [];
 
+          // create supers
           superCUsers = await Promise.all(supers.map(async (superData) => {
+            // create super chat
             let superChat = await SuperChat.findOne({
               hash : superData.hash,
             });
 
+            // create if it doesn't exist
             if (!superChat) {
+              // create super chat
               superChat = new SuperChat({
                 hash : superData.hash,
                 ...superData,
               });
 
+              // save super chat
               await superChat.save();
             }
 
+            // push to chats
             superChats.push(superChat);
 
+            // return super user
             return ((await SuperCUser.findOne({
               'member.id'    : member.id || member.get('_id'),
               'superChat.id' : superChat.get('_id'),
@@ -250,37 +295,56 @@ class ChatHelper extends Helper {
           }));
         }
 
+        // loop updates
         for (const [key, value] of Object.entries(updates)) {
+          // set value
           if (cUser) cUser.set(key, value);
-          if (thru >= 1) superCUsers.forEach(s => s.set(key, value));
-          if (thru === 2) member.set(`chat.${key}`, value);
+
+          // set to superCUsers
+          if (level >= 1) superCUsers.forEach(s => s.set(key, value));
+
+          // set to chat member
+          if (level === 2) member.set(`chat.${key}`, value);
         }
 
+        // set data
         const data = {};
 
+        // await hook
         await this.eden.hook('eden.chat.member.sets', {
           chat, data, updates, member, cUser, superCUsers, superChats,
         }, async () => {
-          if (!data.prevent) {
-            if (cUser) await cUser.save();
-            if (thru >= 1) await Promise.all(superCUsers.map(async s => s.save()));
-            if (thru === 2) await member.save();
-          }
+          // check prevented
+          if (data.prevent) return;
+
+          // save everything
+          if (cUser) await cUser.save();
+          if (level >= 1) await Promise.all(superCUsers.map(async s => s.save()));
+          if (level === 2) await member.save();
         });
       }
     } catch (err) {
+      // do unlock
       if (unlock !== null) unlock();
+
+      // throw error
       throw err;
     }
 
+    // do unlock
     if (unlock !== null) unlock();
 
     // can chat id really ever be null?
     if (cUser && chat && (chat.id || chat.get('_id'))) {
-      socket.user(member, `model.update.chat.${chat.id || chat.get('_id')}`, updates.map(([key]) => {
-        return cUser.get(key);
+      // emit to socket
+      socket.user(member, `model.update.chat.${chat.id || chat.get('_id')}`, Object.entries(updates).map(([key]) => {
+        // return array map
+        return [key, cUser.get(key)];
       }).reduce((acc, [key, value]) => {
+        // add to object
         acc[key] = value;
+
+        // return accumulator
         return acc;
       }, {}));
     }
@@ -299,6 +363,7 @@ class ChatHelper extends Helper {
    * @return {Promise}
    */
   async memberSet(member, chat, key, value) {
+    // return member set
     return await this.memberSets(member, chat, { [key] : value }, [], false);
   }
 
