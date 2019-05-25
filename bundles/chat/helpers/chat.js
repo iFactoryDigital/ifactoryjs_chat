@@ -80,7 +80,7 @@ class ChatHelper extends Helper {
    *
    * @return {*}
    */
-  async create(member, members, opts = {}, hash = null, updates = {}, supers = [], level = false) {
+  async create(member, members, opts = {}, hash = null, updates = {}, supers = [], level = 0) {
     // no chats with one or no users
     if (members.length < 2) return null;
 
