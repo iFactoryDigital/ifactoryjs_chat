@@ -17,6 +17,26 @@ const Message    = model('chatMessage');
 const SuperChat  = model('superChat');
 const SuperCUser = model('superChatUser');
 
+function flatifyObj(obj) {
+  const flatObj = {};
+
+  function iterate(iteratedObj, path = '') {
+    for (const [prop, propVal] of Object.entries(iteratedObj)) {
+      const fullPath = (path.length > 0 ? `${path}.${prop}` : `${prop}`);
+
+      if (propVal != null && typeof propVal === 'object' && !(propVal instanceof Array) && !(propVal instanceof RegExp)) {
+        iterate(propVal, fullPath);
+      } else {
+        flatObj[fullPath] = propVal;
+      }
+    }
+  }
+
+  iterate(obj);
+
+  return flatObj;
+}
+
 /**
  * extend chat helper
  *
@@ -296,7 +316,7 @@ class ChatHelper extends Helper {
         }
 
         // loop updates
-        for (const [key, value] of Object.entries(updates)) {
+        for (const [key, value] of Object.entries(flatifyObj(updates))) {
           // set value
           if (cUser) cUser.set(key, value);
 
