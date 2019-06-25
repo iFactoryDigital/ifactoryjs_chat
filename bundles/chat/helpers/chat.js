@@ -162,7 +162,7 @@ class ChatHelper extends Helper {
       // loop members
       for (const m of membersWithUpdates) {
         // set member
-        await this.memberSets(m, chat, updates[m.id || m.get('_id')], [], supers, level);
+        await this.memberSets(m, chat, updates[m.id || m.get('_id')], supers, level);
       }
 
       // lock adding cusers
