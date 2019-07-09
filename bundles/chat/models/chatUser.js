@@ -9,7 +9,7 @@ class ChatUser extends Model {
   /**
    * construct chat model
    */
-constructor(...args) {
+  constructor(...args) {
     // Run super
     super(...args);
 

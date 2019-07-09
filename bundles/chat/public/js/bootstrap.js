@@ -2,6 +2,9 @@
 // Require local dependencies
 const store = require('default/public/js/store');
 
+// built
+let built = null;
+
 /**
  * Build socket class
  */
@@ -34,9 +37,13 @@ class ChatStore {
   }
 }
 
+// built
+built = new ChatStore();
+
 /**
  * Export built socket class
  *
  * @type {ChatStore}
  */
-module.exports = window.eden.chat = new ChatStore();
+window.eden.chat = built;
+module.exports = built;

@@ -22,7 +22,7 @@ class ChatMessage extends Model {
    *
    * @return {*}
    */
-  async sanitise(sensitive = false, type) {
+  async sanitise(sensitive = false) {
     // return object
     const sanitised = {
       id     : this.get('_id') ? this.get('_id').toString() : null,
