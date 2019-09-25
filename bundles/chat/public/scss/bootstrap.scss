@@ -85,6 +85,19 @@ $chat-pane-height : $chat-pane-width * 1.5!default;
     }
   }
 
+  &.chat-pane-full {
+    width    : 100%;
+    position : static;
+
+    .card {
+      width : 100%;
+
+      &.chat-open {
+        height : 100%;
+      }
+    }
+  }
+
   .btn-file {
     position : relative;
     overflow : hidden;

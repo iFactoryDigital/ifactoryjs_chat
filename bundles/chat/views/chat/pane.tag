@@ -1,6 +1,6 @@
 <chat-pane>
   <div class="card card-chat{ this.chat.get('minimised') ? ' chat-closed' : ' chat-open' }">
-    <div class="card-header">
+    <div class="card-header" if={ !opts.noHeader }>
       <div class="row row-eq-height">
         <div class="col-7 d-flex align-items-center">
           <div class="w-100 text-overflow" onclick={ onToggleOpen }>

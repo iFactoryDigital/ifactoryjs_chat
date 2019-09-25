@@ -64,12 +64,12 @@ class ChatController extends Controller {
    * @call   chat.create
    * @return {Promise}
    */
-  async createAction(ids, opts) {
+  async createAction(ids, hash, opts) {
     // get users
     const users = await Promise.all(ids.map(user => User.findById(user)));
 
     // create chat
-    const chat = await chatHelper.create(opts.user, users);
+    const chat = await chatHelper.create(opts.user, users, {}, hash);
 
     // return chat
     return await chat.sanitise(opts.user);

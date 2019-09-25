@@ -102,7 +102,7 @@ class ChatHelper extends Helper {
    */
   async create(member, members, opts = {}, hash = null, updates = {}, supers = [], level = 0) {
     // no chats with one or no users
-    if (members.length < 2) return null;
+    if (members.length < 1) return null;
 
     // create hash
     if (hash === null) hash = members.map(m => m.id || m.get('_id')).sort().join(':');
@@ -150,6 +150,8 @@ class ChatHelper extends Helper {
 
     // updates
     for (const m of members) {
+      if (!m) continue;
+      
       if (updates && updates[m.id || m.get('_id')] && updates[m.id || m.get('_id')].length > 0) {
         membersWithUpdates.push(m);
       } else {

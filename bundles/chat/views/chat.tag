@@ -107,6 +107,9 @@
      * @return {Promise}
      */
     async onChatRead(chat) {
+      // check chat
+      if (!chat) return;
+
       // set read
       chat.set('read', new Date());
       chat.set('unread', 0);
@@ -216,6 +219,9 @@
       
       // load users
       this.chats = (await socket.call('chat.all') || []).map(chat => this.model('chat', chat));
+
+      // set chats
+      this.eden.get('chat').chats = this.chats;
       
       // set loading
       this.loading = false;
