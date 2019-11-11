@@ -1,6 +1,6 @@
 <chat-message>
   <div class="message-data { message.from === this.user.get('id') ? 'text-left' : 'text-right' }">
-    { getFrom(message).username }, <small class="text-muted">{ getDate(message) }</small>
+    { getFrom(message) ? getFrom(message).username : '' }, <small class="text-muted">{ getDate(message) }</small>
   </div>
 
   <div class="message { message.from === this.user.get('id') ? 'my-message' : 'other-message float-right text-right' }">
@@ -18,16 +18,16 @@
       </div>
     </a>
   </div>
-  
+
   <script>
     // do mixins
     this.mixin('user');
     this.mixin('media');
-    
+
     // require dependencies
     const moment    = require('moment');
     const Scrollbar = require('perfect-scrollbar');
-    
+
     /**
      * gets from
      *
@@ -39,7 +39,7 @@
       // return usernames
       return opts.chat.get('members').find((member) => member.id === message.from);
     }
-    
+
     /**
      * get date
      *
@@ -51,7 +51,7 @@
       // from now
       return moment(message.created_at).fromNow();
     }
-    
+
     /**
      * do scroll
      *
@@ -67,12 +67,12 @@
         this.embedScroll = null;
       }
     }
-    
+
     // on mount
     this.on('mount', () => {
       // check frontend
       if (!this.eden.frontend || !this.user.exists()) return;
-      
+
       // scroll to bottom
       this.doScroll();
     });
