@@ -67,12 +67,16 @@ class ChatController extends Controller {
   async createAction(ids, hash, opts) {
     // get users
     const users = await Promise.all(ids.map(user => User.findById(user)));
+    let user = opts.user;
 
+    if (opts.user && opts.user.__data && opts.user.__data._id) {
+      user = await User.findById(opts.user.__data._id);
+    }
     // create chat
-    const chat = await chatHelper.create(opts.user, users, {}, hash);
+    const chat = await chatHelper.create(user, users, {}, hash);
 
     // return chat
-    return await chat.sanitise(opts.user);
+    return await chat.sanitise(user);
   }
 
   /**
@@ -137,12 +141,16 @@ class ChatController extends Controller {
   async memberSetAction(id, key, value, opts) {
     // load chat
     const chat = await Chat.findById(id);
+    let user = opts.user;
 
+    if (opts.user && opts.user.__data && opts.user.__data && opts.user.__data._id) {
+      user = await User.findById(opts.user.__data._id);
+    }
     // cuser
-    await chatHelper.member.set(opts.user, chat, key, value);
+    await chatHelper.member.set(user, chat, key, value);
 
     // return chat
-    return await chat.sanitise(opts.user);
+    return await chat.sanitise(user);
   }
 
   /**

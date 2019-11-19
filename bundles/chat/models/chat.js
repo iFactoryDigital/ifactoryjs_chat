@@ -48,7 +48,7 @@ class Chat extends Model {
       // user stuff
       const userStuff = await CUser.findOne({
         'chat.id'   : this.get('_id'),
-        'member.id' : user.id || user.get('_id'),
+        'member.id' : user.get('_id') || user.id,
       }) || new CUser();
 
       // loop user stuff

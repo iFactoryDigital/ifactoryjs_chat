@@ -1,7 +1,7 @@
 <chat>
   <div if={ this.user.exists() } class={ 'chat' : true, 'd-none' : !this.eden.frontend }>
     <div class="chat-chats { 'is-open' : this.open }">
-    
+
       <div class={ 'card card-chats mb-3' : true, 'd-none' : !this.open }>
         <div class="card-header p-2">
           <div class="form-group m-0">
@@ -24,11 +24,11 @@
           </div>
         </div>
       </div>
-      
+
       <button class="btn btn-open btn-primary" onclick={ onToggleOpen }>
         <i class="fa fa-comments" />
       </button>
-      
+
       <div ref="container">
         <chat-pane each={ chat, i in getChats() } if={ !chat.get('style') } on-close={ onChatClose } on-read={ onChatRead } on-activate={ onChatActivate } chat={ chat } i={ i } class="chat-pane chat-pane-{ i } { chat.get('active') ? 'active' : '' }" data-chat={ chat.get('uuid') } onclick={ onChatActivate } />
         <chat-pane each={ chat, i in getChats(true) } if={ chat.get('style') } on-close={ onChatClose } on-read={ onChatRead } on-activate={ onChatActivate } chat={ chat } i={ i } class="chat-pane chat-free { chat.get('active') ? 'active' : '' }" data-chat={ chat.get('uuid') } style="top: { chat.get('style.top') }; left: { chat.get('style.left') };{ chat.get('style.z-index') ? 'z-index: ' + chat.get('style.z-index') + ';' : '' }" onclick={ onChatActivate } />
@@ -47,7 +47,7 @@
     this.members = [];
     this.actives = [];
     this.loading = true;
-    
+
     /**
      * on chat
      *
@@ -57,48 +57,52 @@
       // prevent default
       e.preventDefault();
       e.stopPropagation();
-      
+
       // get user
       const user = e.item.user;
-      
+
       // set loading
       user.loading = true;
-      
+
       // set chat
       this.update();
-      
+
+      const opts = {
+        user: this.user,
+      }
+
       // create chat
-      const chat = await socket.call('chat.create', [this.user.get('id'), user.id]);
-      await socket.call('chat.member.set', chat.id, 'opened', true);
-      
+      const chat = await socket.call('chat.create', [this.user.get('id'), user.id], '', opts);
+      await socket.call('chat.member.set', chat.id, 'opened', true, opts);
+
       // set loading
       user.loading = false;
-      
+
       // set chat
       this.update();
     }
-    
+
     /**
      * on close chat
      *
      * @param  {Chat} chat
      */
-    async onChatClose(chat) {      
+    async onChatClose(chat) {
       // filter chats
       this.chats = this.chats.filter((c) => c.get('id') !== chat.get('id'));
-      
+
       // set opened
       chat.set('opened', false);
-      
+
       // set opened
       await socket.call('chat.member.set', chat.get('id'), 'style', null);
       await socket.call('chat.member.set', chat.get('id'), 'opened', false);
       await socket.call('chat.member.set', chat.get('id'), 'minimised', false);
-      
+
       // update
       this.update();
     }
-    
+
     /**
      * on read
      *
@@ -113,14 +117,14 @@
       // set read
       chat.set('read', new Date());
       chat.set('unread', 0);
-      
+
       // call socket
       socket.call('chat.member.read', chat.get('id'), chat.get('read'));
-      
+
       // update view
       this.update();
     }
-    
+
     /**
      * on activate
      *
@@ -129,31 +133,31 @@
     async onChatActivate(e) {
       // get chat
       const chat = (e.item || {}).chat || e;
-        
+
       // get chats
       chat.set('active', true);
       if (chat.get('style')) chat.set('style.z-index', 100 + this.getChats(true).length);
-      
+
       // move down next top chat
       this.chats.filter((c) => c.get('id') !== chat.get('id')).forEach((c) => {
         // set z-index
         if (c.get('style.z-index')) c.set('style.z-index', c.get('style.z-index') === 100 ? 100 : c.get('style.z-index') - 1);
         c.set('active', false);
-        
+
         // set chat style
         if (chat.get('style')) socket.call('chat.member.set', c.get('id'), 'style', c.get('style'));
       });
-      
+
       // set chat style
       if (chat.get('style')) await socket.call('chat.member.set', chat.get('id'), 'style', chat.get('style'));
-      
+
       // set opened
       await socket.call('chat.member.set', chat.get('id'), 'opened', true);
-      
+
       // on read
       this.onChatRead(chat);
     }
-    
+
     /**
      * on send
      *
@@ -165,11 +169,11 @@
       // prevent default
       e.preventDefault();
       e.stopPropagation();
-      
+
       // load users
       this.loadMembers();
     }
-    
+
     /**
      * on keyup
      *
@@ -182,7 +186,7 @@
         this.onSearch(e);
       }
     }
-    
+
     /**
      * load users
      *
@@ -191,20 +195,20 @@
     async loadMembers() {
       // set loading
       this.loading = true;
-      
+
       // update view
       this.update();
-      
+
       // load users
       this.members = await socket.call('chat.members', this.refs.search.value);
-      
+
       // set loading
       this.loading = false;
-      
+
       // update view
       this.update();
     }
-    
+
     /**
      * load users
      *
@@ -213,23 +217,23 @@
     async loadChats() {
       // set loading
       this.loading = true;
-      
+
       // update view
       this.update();
-      
+
       // load users
       this.chats = (await socket.call('chat.all') || []).map(chat => this.model('chat', chat));
 
       // set chats
       this.eden.get('chat').chats = this.chats;
-      
+
       // set loading
       this.loading = false;
-      
+
       // update view
       this.update();
     }
-    
+
     /**
      * get chats
      *
@@ -244,7 +248,7 @@
         return chat.get('opened') && ((free && chat.get('style')) || (!free && !chat.get('style')));
       });
     }
-    
+
     /**
      * on toggle open
      *
@@ -254,14 +258,14 @@
       // prevent default
       e.preventDefault();
       e.stopPropagation();
-      
+
       // toggle open
       this.open = !this.open;
-      
+
       // update view
       this.update();
     }
-    
+
     /**
      * on toggle chat
      *
@@ -276,11 +280,11 @@
         // push active chat
         this.actives.push(e.item.chat.get('uuid'));
       }
-      
+
       // update view
       this.update();
     }
-    
+
     /**
      * set dragula
      *
@@ -289,40 +293,40 @@
     dragula() {
       // require dragula
       const dragula = require('dragula');
-      
+
       // drop function
       const drop = (el, target, source, sibling) => {
         // get style element
         const clone = document.querySelector('.gu-mirror[data-chat="' + el.getAttribute('data-chat') + '"]');
-        
+
         // get styleW
         const chat = this.chats.find((chat) => chat.get('uuid') === el.getAttribute('data-chat'));
-        
+
         // set style
         chat.set('style', {
           top  : clone.style.top,
           left : clone.style.left,
         });
-        
+
         // activate chat
         this.onChatActivate(chat);
-        
+
         // update view
         this.update();
       };
-      
+
       // get elements
       this.drake =  dragula([this.refs.container], {
         moves : function (el, source, handle, sibling) {
           // get parent
           let parent = handle;
-          
+
           // check moves
           while (parent && parent.getAttribute) {
             // return true if has card header
             if ((parent.getAttribute('class') || '').includes('card-header')) return true;
             if ((parent.getAttribute('class') || '').includes('btn')) return false;
-            
+
             // set parent
             parent = parent.parentNode;
           }
@@ -330,7 +334,7 @@
       }).on('cloned', (clone, original, type) => {
         // set scroll height
         const scroll = clone.querySelector('[ref="messages"]');
-        
+
         // fix scroll top
         if (scroll) scroll.scrollTop = scroll.scrollHeight;
       }).on('drag', (el, source) => {
@@ -338,46 +342,47 @@
         el.style.opacity = 0;
       }).on('cancel', drop).on('drop', drop);
     }
-    
+
     /**
      * on created chat
      *
      * @param  {Object} chat
      */
     onCreated(chat) {
+      console.log(chat);
       // check chat exists
       if (this.chats.find(c => c.get('uuid') === chat.uuid)) {
         return;
       }
-      
+
       // push chat
       this.chats.push(this.model('chat', chat));
-      
+
       // update view
       this.update();
     }
-    
+
     // on mount
     this.on('unmount', () => {
       // check frontend
       if (!this.eden.frontend) return;
-      
+
       // on created
       socket.off('chat.create', this.onCreated);
     });
-    
+
     // on mount
     this.on('mount', () => {
       // check frontend
       if (!this.eden.frontend || !this.user.exists()) return;
-      
+
       // setup dragula
       this.dragula();
-      
+
       // load users
       this.loadChats();
       this.loadMembers();
-      
+
       // on created
       socket.on('chat.create', this.onCreated);
     });
