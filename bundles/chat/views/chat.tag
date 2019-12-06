@@ -349,7 +349,6 @@
      * @param  {Object} chat
      */
     onCreated(chat) {
-      console.log(chat);
       // check chat exists
       if (this.chats.find(c => c.get('uuid') === chat.uuid)) {
         return;
