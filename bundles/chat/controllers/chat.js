@@ -48,7 +48,6 @@ class ChatController extends Controller {
 
   }
 
-
   // ////////////////////////////////////////////////////////////////////////////
   //
   // CRUD METHODS
@@ -65,6 +64,8 @@ class ChatController extends Controller {
    * @return {Promise}
    */
   async createAction(ids, hash, opts) {
+    console.log('createAction=============================');
+    console.log(hash);
     // get users
     const users = await Promise.all(ids.map(user => User.findById(user)));
     let user = opts.user;
